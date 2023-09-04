@@ -7,5 +7,9 @@ class User(db.Model):
 
 @app.route('/')
 def index():
-    users = User.query.all()
-    return render_template('index.html', users=users)
+    # Generate example metrics (replace with real data)
+    metric1 = random.randint(10, 100)
+    metric2 = random.uniform(1.0, 10.0)
+    metric3 = random.randint(500, 1000)
+
+    return render_template('index.html', metric1=metric1, metric2=metric2, metric3=metric3)
