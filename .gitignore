@@ -162,3 +162,4 @@ cython_debug/
 /key.txt
 /credentials.json
 /token.json
+/stripe.json
