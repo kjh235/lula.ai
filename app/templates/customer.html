@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
+    <title>Lula.ai - {{ customer.CustomerName }}</title>
+</head>
+<body>
+    <nav>
+        <a href="/">Dashboard</a> | <a href="/customers">Customers</a>
+    </nav>
+
+    <h1>{{ customer.CustomerName }}</h1>
+    <p>{{ customer.CustomerEmail }} &mdash; LTV: ${{ "%.2f" | format(ltv) }} &mdash; {{ pieces | int }} pieces</p>
+
+    <h2>Purchase History</h2>
+    {% if history %}
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Order #</th>
+                <th>Product</th>
+                <th>Style</th>
+                <th>Size</th>
+                <th>Family</th>
+                <th>Price</th>
+                <th>Fit Feedback</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for h in history %}
+            <tr>
+                <td>{{ h.date or '' }}</td>
+                <td>{{ h.order_number }}</td>
+                <td>{{ h.product_name }}</td>
+                <td>{{ h.product_style or '' }}</td>
+                <td>{{ h.size or '' }}</td>
+                <td>{{ h.sizing_family or '' }}</td>
+                <td>${{ "%.2f" | format(h.total_price or 0) }}</td>
+                <td>
+                    {% if h.product_sku %}
+                    <select class="fit-select" data-customer="{{ customer.CustomerID }}" data-sku="{{ h.product_sku }}" data-size="{{ h.size or '' }}" data-order="{{ h.order_number }}">
+                        <option value="">--</option>
+                        <option value="too_small">Too Small</option>
+                        <option value="true_to_size">True to Size</option>
+                        <option value="too_large">Too Large</option>
+                    </select>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No purchase history found.</p>
+    {% endif %}
+
+    <h2>Recommended Products</h2>
+    {% if recommendations %}
+    <table>
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th>Style</th>
+                <th>Recommended Size</th>
+                <th>Confidence</th>
+                <th>Price</th>
+                <th>Based On</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in recommendations %}
+            <tr>
+                <td>{{ r.product_name }}</td>
+                <td>{{ r.product_style }}</td>
+                <td><strong>{{ r.recommended_size }}</strong></td>
+                <td>{{ r.fit_confidence }}</td>
+                <td>${{ "%.2f" | format(r.unit_price or 0) }}</td>
+                <td>{{ r.based_on_name }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No recommendations available. Train the model first: <code>python -m app.ml.train --seed</code></p>
+    {% endif %}
+
+    <script>
+    document.querySelectorAll('.fit-select').forEach(function(sel) {
+        sel.addEventListener('change', function() {
+            if (!this.value) return;
+            fetch('/api/feedback', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    customer_id: this.dataset.customer,
+                    product_sku: this.dataset.sku,
+                    size: this.dataset.size,
+                    outcome: this.value,
+                    order_number: this.dataset.order
+                })
+            }).then(function(r) {
+                if (r.ok) {
+                    sel.style.backgroundColor = '#d4edda';
+                } else {
+                    sel.style.backgroundColor = '#f8d7da';
+                }
+            });
+        });
+    });
+    </script>
+</body>
+</html>

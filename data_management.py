@@ -647,7 +647,62 @@ CREATE TABLE IF NOT EXISTS Tasks (
 ''')
 conn.commit()
 
+# Add sizing columns to Products (idempotent)
+try:
+    cursor.execute("ALTER TABLE Products ADD COLUMN SizeNormalized TEXT")
+    conn.commit()
+except:
+    pass
+try:
+    cursor.execute("ALTER TABLE Products ADD COLUMN SizingFamily TEXT")
+    conn.commit()
+except:
+    pass
 
+# Create FitFeedback table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS FitFeedback (
+    FeedbackID TEXT PRIMARY KEY,
+    CustomerID TEXT NOT NULL,
+    ProductSKU TEXT NOT NULL,
+    OrderNumber TEXT,
+    SizePurchased TEXT NOT NULL,
+    FitOutcome TEXT NOT NULL CHECK (FitOutcome IN ('too_small','true_to_size','too_large')),
+    Source TEXT NOT NULL CHECK (Source IN ('explicit','implicit_repeat')),
+    CreatedAt TEXT NOT NULL,
+    FOREIGN KEY (CustomerID) REFERENCES CUSTOMERS(CustomerID)
+)
+''')
+conn.commit()
+try:
+    cursor.execute("CREATE INDEX idx_fitfb_customer ON FitFeedback(CustomerID)")
+    conn.commit()
+except:
+    pass
+try:
+    cursor.execute("CREATE INDEX idx_fitfb_sku ON FitFeedback(ProductSKU)")
+    conn.commit()
+except:
+    pass
+
+# Backfill SizingFamily and SizeNormalized where missing
+from app.sizing import classify_family, normalize_size as _normalize_size
+_needs_backfill = cursor.execute(
+    "SELECT COUNT(*) FROM Products WHERE SizingFamily IS NULL"
+).fetchone()[0]
+if _needs_backfill > 0:
+    _rows = cursor.execute(
+        "SELECT ProductID, ProductStyle, ProductSize FROM Products WHERE SizingFamily IS NULL"
+    ).fetchall()
+    for _row in _rows:
+        _pid, _style, _size = _row[0], _row[1], _row[2]
+        _family = classify_family(_style, _size)
+        _norm = _normalize_size(_size)
+        cursor.execute(
+            "UPDATE Products SET SizingFamily=?, SizeNormalized=? WHERE ProductID=?",
+            (_family, _norm, _pid)
+        )
+    conn.commit()
 
 #insert_customer(conn, customerrec)
 # insert_product(conn,productrec)
