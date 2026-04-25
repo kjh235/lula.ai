@@ -53,17 +53,17 @@ def translate_productName_to_invoiceName(sku_list):
         "CRER22": "Career 2022",
         "4J23":"Americana 2023",
         "4J22": "Americana 2022",
-        "DREAM22":"",
-        "DREAM21": "",
+        "DREAM22 ":"",
+        "DREAM21 ": "",
         "High Rise Slim Straight":"",
         "SP22 ":"",
-        "VL22":"",
+        "VL22 ":"",
         "HW22":"Halloween 2022",
         "HW21": "Halloween 2021",
-        "BOHO22":"",
-        "LUXE21":"",
-        "DNM21":"",
-        "DR21": "",
+        "BOHO22 ":"",
+        "LUXE21 ":"",
+        "DNM21 ":"",
+        "DR21 ": "",
         "BCA21":"BCA 2021",
         "ATR23":"Animal"
         }
@@ -421,11 +421,18 @@ def transfer_paid_parse(k, recipient_email):
         order_items.append(items)
         j += 1
     addr_lines = DATE_INDEX - SHIP_TO_INDEX - 3
-    addr1 = k[SHIP_TO_INDEX + 2]
-    addr2 = ""
+    if addr_lines == 0:
+        addr1 = k[SHIP_TO_INDEX + 1]
+        addr2 = ""
+        city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[SHIP_TO_INDEX + 2])
+    if addr_lines == 1:
+        addr1 = k[SHIP_TO_INDEX + 2]
+        addr2 = ""
+        city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[SHIP_TO_INDEX + 3])
     if addr_lines > 1:
+        addr1 = k[SHIP_TO_INDEX + 2]
         addr2 = k[SHIP_TO_INDEX + 3]
-    city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[DATE_INDEX - 1])
+        city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[DATE_INDEX - 1])
     city = city_state_zip.group(1)
     state = city_state_zip.group(2)
     zip = city_state_zip.group(3)

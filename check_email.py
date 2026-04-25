@@ -172,11 +172,11 @@ def transferPaid(creds, search_query):
 
 
 
-search_query_retail_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Order Number" after:2024/08/10'
-search_query_transfer_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Transfer Order Number" after:2024/08/10'
-search_query_purchase = 'from:noreply@lularoe.com subject: "LuLaRoe Wholesale Order Confirmation" after:2024/01/10'
-search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Purchase Receipt from LuLaRoe - Order Number" after:2024/08/10'
-search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2024/08/10'
+search_query_retail_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Order Number" after:2024/09/01'
+search_query_transfer_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Transfer Order Number" after:2024/09/01'
+search_query_purchase = 'from:noreply@lularoe.com subject: "LuLaRoe Wholesale Order Confirmation" after:2024/09/01'
+search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Purchase Receipt from LuLaRoe - Order Number" after:2024/09/01'
+search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2024/01/01'
 
 #get latest run time
 conn = sqlite3.connect("app/bless.db")
@@ -184,10 +184,10 @@ data_management.init_task(conn,"CHECK_EMAILS")
 data_management.update_task_start_time(conn,"CHECK_EMAILS", time.time())
 creds = gmail.gmail_creds()
 purchaseOrders(creds, search_query_purchase)
-#retailInvoices(creds, search_query_retail_invoices)
-#retailPaid(creds, search_query_retail_paid)
-#transferInvoices(creds, search_query_transfer_invoices)
-#transferPaid(creds,search_query_transfer_paid)
+retailInvoices(creds, search_query_retail_invoices)
+retailPaid(creds, search_query_retail_paid)
+transferInvoices(creds, search_query_transfer_invoices)
+transferPaid(creds,search_query_transfer_paid)
 data_management.update_task_end_time(conn,"CHECK_EMAILS", time.time())
 #update latest run time
 

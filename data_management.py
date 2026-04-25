@@ -661,14 +661,14 @@ df_prod = pd.read_sql_query("SELECT * from Products", conn)
 df_po = pd.read_sql_query("SELECT * from PurchaseOrders", conn)
 
 df_po_items = pd.read_sql_query("SELECT * from PurchaseOrderItems", conn)
-df_monthToDate_po_paid = df_po.loc[(pd.to_datetime(df_po['OrderDate'],format='%Y-%m-%d %H:%M:%S').dt.month == 8)].loc[(pd.to_datetime(df_po['OrderDate'],format='%Y-%m-%d %H:%M:%S').dt.year == 2024)]
+df_monthToDate_po_paid = df_po.loc[(pd.to_datetime(df_po['OrderDate'],format='%Y-%m-%d %H:%M:%S').dt.month == 10)].loc[(pd.to_datetime(df_po['OrderDate'],format='%Y-%m-%d %H:%M:%S').dt.year == 2024)]
 # Commit changes and close the connectionRetailOrders
 df_orders = pd.read_sql_query("SELECT * from Orders", conn)
 df_retail_orders = df_orders[df_orders.OrderType == "RETAIL"]
 df_open_retail_invoice = df_retail_orders[df_retail_orders.PaidDate.isnull()]
 df_transfer_orders = df_orders[df_orders.OrderType == "TRANSFER_OUT"]
-df_monthToDate_paid = df_retail_orders.loc[pd.to_datetime(df_retail_orders['PaidDate'],format='%Y-%m-%d %H:%M:%S').dt.month == 8].loc[(pd.to_datetime(df_retail_orders['PaidDate'],format='%Y-%m-%d %H:%M:%S').dt.year == 2024)]
-df_monthToDateTransfers_paid = df_transfer_orders.loc[pd.to_datetime(df_transfer_orders['PaidDate'],format='%Y-%m-%d %H:%M:%S').dt.month == 8].loc[df_transfer_orders['OrderType'] == "TRANSFER_OUT"].loc[(pd.to_datetime(df_transfer_orders['PaidDate'],format='%Y-%m-%d %H:%M:%S').dt.year == 2024)]
+df_monthToDate_paid = df_retail_orders.loc[pd.to_datetime(df_retail_orders['PaidDate'],format='%Y-%m-%d %H:%M:%S').dt.month == 10].loc[(pd.to_datetime(df_retail_orders['PaidDate'],format='%Y-%m-%d %H:%M:%S').dt.year == 2024)]
+df_monthToDateTransfers_paid = df_transfer_orders.loc[pd.to_datetime(df_transfer_orders['PaidDate'],format='%Y-%m-%d %H:%M:%S').dt.month == 10].loc[df_transfer_orders['OrderType'] == "TRANSFER_OUT"].loc[(pd.to_datetime(df_transfer_orders['PaidDate'],format='%Y-%m-%d %H:%M:%S').dt.year == 2024)]
 df_order_items = pd.read_sql_query("SELECT * from OrderItems", conn)
 # print(df_monthToDate_paid['PaidSubtotal'].sum())
 # print(df_monthToDate_paid['PaidTotal'].sum())
