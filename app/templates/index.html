@@ -2,14 +2,17 @@
 <html>
 <head>
     <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
-    <title>Lula.ai - AI for your LuLaRoe World</title>
+    <title>Lula.ai - Dashboard</title>
 </head>
 <body>
+    <nav>
+        <a href="/">Dashboard</a> | <a href="/customers">Customers</a>
+    </nav>
     <h1>Metrics Dashboard</h1>
     <ul>
-        <li>Metric 1: {{ metric1 }}</li>
-        <li>Metric 2: {{ metric2 }}</li>
-        <li>Metric 3: {{ metric3 }}</li>
+        <li>Customers: {{ metric1 }}</li>
+        <li>Products: {{ metric2 }}</li>
+        <li>Retail Orders: {{ metric3 }}</li>
     </ul>
 </body>
 </html>
