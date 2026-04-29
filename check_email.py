@@ -6,6 +6,9 @@ from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 from datetime import datetime
 import time
+
+data_management.init_db()
+
 def purchaseOrders(creds, search_query):
     # Call the Gmail API
     service = build('gmail', 'v1', credentials=creds)
