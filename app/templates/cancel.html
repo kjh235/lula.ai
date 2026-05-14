@@ -1,16 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Flask + Stripe Subscriptions</title>
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" crossorigin="anonymous">
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" crossorigin="anonymous"></script>
-  </head>
-  <body>
-    <div class="container mt-5">
-      <p>You have cancelled the checkout.</p>
-    </div>
-  </body>
+<html>
+<head>
+    <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
+    <title>Lula.ai - Checkout Cancelled</title>
+</head>
+<body>
+    <nav>
+        <a href="/">Dashboard</a> | <a href="/customers">Customers</a> | <a href="/subscribe">Subscribe</a>
+    </nav>
+
+    <h1>Checkout Cancelled</h1>
+    <p>Your checkout was cancelled. <a href="/subscribe">Try again</a> or <a href="/">go to Dashboard</a>.</p>
+</body>
 </html>

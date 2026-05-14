@@ -1,0 +1,152 @@
+import os
+import json
+import logging
+import binascii
+from datetime import datetime
+
+import stripe
+from flask import Blueprint, jsonify, render_template, request, current_app
+
+from app.db import get_conn
+
+logger = logging.getLogger(__name__)
+
+payments = Blueprint('payments', __name__)
+
+
+def _stripe_keys():
+    return current_app.config.get('STRIPE_KEYS', {})
+
+
+@payments.route("/subscribe")
+def subscribe():
+    keys = _stripe_keys()
+    return render_template("subscribe.html", publishable_key=keys.get("publishable_key", ""))
+
+
+@payments.route("/create-checkout-session", methods=["POST"])
+def create_checkout_session():
+    keys = _stripe_keys()
+    if not keys.get("secret_key"):
+        return jsonify(error="Stripe is not configured"), 500
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            success_url=request.host_url + "success?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=request.host_url + "cancel",
+            payment_method_types=["card"],
+            mode="subscription",
+            line_items=[{"price": keys["price_id"], "quantity": 1}],
+        )
+        return jsonify({"sessionId": checkout_session["id"]})
+    except Exception as e:
+        logger.error("Stripe checkout error: %s", e)
+        return jsonify(error=str(e)), 403
+
+
+@payments.route("/success")
+def success():
+    return render_template("success.html")
+
+
+@payments.route("/cancel")
+def cancel():
+    return render_template("cancel.html")
+
+
+@payments.route("/webhook", methods=["POST"])
+def stripe_webhook():
+    keys = _stripe_keys()
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get("Stripe-Signature")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, keys.get("endpoint_secret", "")
+        )
+    except ValueError:
+        return "Invalid payload", 400
+    except stripe.error.SignatureVerificationError:
+        return "Invalid signature", 400
+
+    if event["type"] == "checkout.session.completed":
+        _handle_checkout_completed(event["data"]["object"])
+    elif event["type"] == "customer.subscription.updated":
+        _handle_subscription_updated(event["data"]["object"])
+    elif event["type"] == "customer.subscription.deleted":
+        _handle_subscription_deleted(event["data"]["object"])
+
+    return "OK", 200
+
+
+def _handle_checkout_completed(session):
+    sub_id = session.get("subscription")
+    customer_id = session.get("customer")
+    customer_email = session.get("customer_details", {}).get("email", "")
+
+    if not sub_id:
+        logger.warning("checkout.session.completed with no subscription id")
+        return
+
+    conn = get_conn()
+    try:
+        sid = binascii.b2a_hex(os.urandom(12)).decode()
+        conn.execute(
+            "INSERT OR REPLACE INTO Subscriptions "
+            "(ID, StripeSubscriptionID, StripeCustomerID, CustomerEmail, Status, CreatedAt) "
+            "VALUES (?, ?, ?, ?, 'active', ?)",
+            (sid, sub_id, customer_id, customer_email, datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+        logger.info("Subscription %s saved for %s", sub_id, customer_email)
+    finally:
+        conn.close()
+
+
+def _handle_subscription_updated(subscription):
+    sub_id = subscription.get("id")
+    status = subscription.get("status")
+
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE Subscriptions SET Status=? WHERE StripeSubscriptionID=?",
+            (status, sub_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _handle_subscription_deleted(subscription):
+    sub_id = subscription.get("id")
+
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE Subscriptions SET Status='canceled' WHERE StripeSubscriptionID=?",
+            (sub_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def load_stripe_config(app):
+    config_path = os.path.join(app.root_path, '..', 'stripe.json')
+    if not os.path.exists(config_path):
+        logger.warning("stripe.json not found — Stripe features disabled")
+        app.config['STRIPE_KEYS'] = {}
+        return
+
+    with open(config_path) as f:
+        data = json.load(f)
+
+    keys = {
+        "secret_key": data.get("STRIPE_SECRET_KEY", ""),
+        "publishable_key": data.get("STRIPE_PUBLISHABLE_KEY", ""),
+        "price_id": data.get("STRIPE_PRICE_ID", ""),
+        "endpoint_secret": data.get("STRIPE_ENDPOINT_SECRET", ""),
+    }
+    app.config['STRIPE_KEYS'] = keys
+    stripe.api_key = keys["secret_key"]
