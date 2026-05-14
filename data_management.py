@@ -186,6 +186,18 @@ def init_db(db_path="app/bless.db"):
     except sqlite3.OperationalError:
         pass
 
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Subscriptions (
+        ID TEXT PRIMARY KEY,
+        StripeSubscriptionID TEXT UNIQUE NOT NULL,
+        StripeCustomerID TEXT,
+        CustomerEmail TEXT,
+        Status TEXT NOT NULL DEFAULT 'active',
+        CreatedAt TEXT NOT NULL
+    )
+    ''')
+    conn.commit()
+
     from app.sizing import classify_family, normalize_size as _normalize_size
     needs_backfill = cursor.execute(
         "SELECT COUNT(*) FROM Products WHERE SizingFamily IS NULL"

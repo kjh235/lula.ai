@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
+    <title>Lula.ai - Subscribe</title>
+    <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+    <nav>
+        <a href="/">Dashboard</a> | <a href="/customers">Customers</a> | <a href="/subscribe">Subscribe</a>
+    </nav>
+
+    <h1>Subscribe to Lula.ai</h1>
+
+    {% if publishable_key %}
+    <div class="subscribe-card">
+        <h2>Monthly Plan</h2>
+        <p>Get full access to analytics, customer insights, and product recommendations.</p>
+        <button id="subscribe-btn">Subscribe Now</button>
+    </div>
+
+    <script>
+    var stripe = Stripe("{{ publishable_key }}");
+
+    document.getElementById("subscribe-btn").addEventListener("click", function() {
+        this.disabled = true;
+        this.textContent = "Loading...";
+
+        fetch("/create-checkout-session", {method: "POST"})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    alert(data.error);
+                    document.getElementById("subscribe-btn").disabled = false;
+                    document.getElementById("subscribe-btn").textContent = "Subscribe Now";
+                    return;
+                }
+                return stripe.redirectToCheckout({sessionId: data.sessionId});
+            })
+            .then(function(result) {
+                if (result && result.error) {
+                    alert(result.error.message);
+                }
+            });
+    });
+    </script>
+    {% else %}
+    <p>Stripe is not configured. Add a <code>stripe.json</code> file to enable subscriptions.</p>
+    {% endif %}
+</body>
+</html>
