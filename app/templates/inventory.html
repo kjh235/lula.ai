@@ -13,13 +13,31 @@
         <div class="stat-value">${{ "%.2f" | format(total_value) }}</div>
         <div class="stat-label">Total Inventory Value</div>
     </div>
-    {% for fc in family_counts %}
     <div class="stat-card">
-        <div class="stat-value">{{ fc.cnt }}</div>
-        <div class="stat-label">{{ fc.SizingFamily or 'Uncategorized' }}</div>
+        <div class="stat-value">{{ style_counts | length }}</div>
+        <div class="stat-label">Distinct Styles</div>
     </div>
-    {% endfor %}
 </div>
+
+{% if style_counts %}
+<div style="padding: 0 32px 20px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>Style Breakdown</h3>
+        </div>
+        <div class="card-body">
+            <div class="style-counts-grid">
+                {% for sc in style_counts %}
+                <div class="style-count-chip">
+                    <span class="style-count-value">{{ sc.cnt }}</span>
+                    <span class="style-count-name">{{ sc.ProductStyle }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div style="padding: 0 32px 32px;">
     <div class="card">
