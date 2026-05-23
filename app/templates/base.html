@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
+    <title>Lula.ai - {% block title %}{% endblock %}</title>
+</head>
+<body class="app-layout">
+    {% set active_page = active_page|default('') %}
+    <aside class="sidebar">
+        <div class="logo">Lula.ai</div>
+        <nav>
+            <a class="sidebar-link{% if active_page == 'dashboard' %} active{% endif %}" href="/dashboard">Dashboard</a>
+            <a class="sidebar-link{% if active_page == 'customers' %} active{% endif %}" href="/customers">Customers</a>
+            <a class="sidebar-link{% if active_page == 'inventory' %} active{% endif %}" href="/inventory">Inventory</a>
+            <a class="sidebar-link{% if active_page == 'orders' %} active{% endif %}" href="/orders">Orders</a>
+        </nav>
+        <a class="sidebar-link sign-out" href="/">Sign Out</a>
+    </aside>
+    <div class="main">
+        <div class="top-bar">
+            <h1>{% block page_title %}{% endblock %}</h1>
+        </div>
+        <div class="main-content">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</body>
+</html>

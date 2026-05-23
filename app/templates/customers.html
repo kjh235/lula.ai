@@ -1,35 +1,63 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
-    <title>Lula.ai - Customers</title>
-</head>
-<body>
-    <nav>
-        <a href="/">Dashboard</a> | <a href="/customers">Customers</a>
-    </nav>
-    <h1>Retail Customers</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Orders</th>
-                <th>Pieces</th>
-                <th>LTV</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for c in customers %}
-            <tr>
-                <td><a href="/customers/{{ c.CustomerID }}">{{ c.CustomerName }}</a></td>
-                <td>{{ c.CustomerEmail }}</td>
-                <td>{{ c.OrderCount }}</td>
-                <td>{{ c.TotalPieces | int }}</td>
-                <td>${{ "%.2f" | format(c.LTV) }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</body>
-</html>
+{% extends "base.html" %}
+{% set active_page = 'customers' %}
+{% block title %}Customers{% endblock %}
+{% block page_title %}Customers{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h3>Retail Customers</h3>
+        <input type="text" class="search-box" id="customerSearch" placeholder="Search customers...">
+    </div>
+    <div class="card-body">
+        {% if customers %}
+        <table class="data-table" id="customerTable">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Email</th>
+                    <th>Orders</th>
+                    <th>Pieces</th>
+                    <th>LTV</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in customers %}
+                <tr>
+                    <td>
+                        <a href="/customers/{{ c.CustomerID }}" class="customer-link">
+                            <span class="customer-avatar">{{ c.CustomerName[0] if c.CustomerName else '?' }}</span>
+                            {{ c.CustomerName }}
+                        </a>
+                    </td>
+                    <td>{{ c.CustomerEmail }}</td>
+                    <td>{{ c.OrderCount }}</td>
+                    <td>{{ c.TotalPieces | int }}</td>
+                    <td>
+                        <span class="ltv-badge {% if c.LTV >= 500 %}ltv-high{% elif c.LTV >= 100 %}ltv-mid{% endif %}">
+                            ${{ "%.2f" | format(c.LTV) }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No customers found.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+document.getElementById('customerSearch').addEventListener('input', function() {
+    var filter = this.value.toLowerCase();
+    var rows = document.querySelectorAll('#customerTable tbody tr');
+    rows.forEach(function(row) {
+        var text = row.textContent.toLowerCase();
+        row.style.display = text.indexOf(filter) > -1 ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

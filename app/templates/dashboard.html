@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% set active_page = 'dashboard' %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">${{ "%.2f" | format(total_revenue) }}</div>
+        <div class="stat-label">Total Revenue</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ "%.2f" | format(mtd_revenue) }}</div>
+        <div class="stat-label">MTD Revenue</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ customer_count }}</div>
+        <div class="stat-label">Customers</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ product_count }}</div>
+        <div class="stat-label">Products</div>
+    </div>
+</div>
+
+<div class="dashboard-columns">
+    <div class="card">
+        <div class="card-header">Recent Orders</div>
+        <div class="card-body">
+            {% if recent_orders %}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Order #</th>
+                        <th>Customer</th>
+                        <th>Total</th>
+                        <th>Pieces</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in recent_orders[:10] %}
+                    <tr>
+                        <td>{{ o.PaidDate }}</td>
+                        <td>{{ o.OrderNumber }}</td>
+                        <td>{{ o.OrderEmail }}</td>
+                        <td>${{ "%.2f" | format(o.PaidTotal) }}</td>
+                        <td>{{ o.PaidPieces }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">No orders yet.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Top Customers</div>
+        <div class="card-body">
+            {% if top_customers %}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Orders</th>
+                        <th>LTV</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in top_customers %}
+                    <tr>
+                        <td><a href="/customers/{{ c.CustomerID }}">{{ c.CustomerName }}</a></td>
+                        <td>{{ c.OrderCount }}</td>
+                        <td>${{ "%.2f" | format(c.LTV) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">No customers yet.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
