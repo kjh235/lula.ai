@@ -5,3 +5,4 @@
 - [ ] Shipping,Fees and Taxes spend widget
 - [ ] Add Transfer_In Order products into Inventory
 - [ ] Add Product Family (Top, Skirt, Long Pants, Short Pants, Dress, Athleisure)
+- [ ] Connect the Stripe subscription workflow
