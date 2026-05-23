@@ -755,6 +755,34 @@ img { max-width: 100%; display: block; }
   .signup-form { padding: 0 8px; }
 }
 
+/* Style Counts (Inventory) */
+.style-counts-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.style-count-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(108, 99, 255, 0.06);
+  border-radius: var(--radius-badge);
+  font-size: 0.88rem;
+  transition: background var(--transition);
+}
+.style-count-chip:hover {
+  background: rgba(108, 99, 255, 0.12);
+}
+.style-count-value {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 0.95rem;
+}
+.style-count-name {
+  color: var(--text);
+}
+
 .subscribe-card {
     border: 1px solid #ddd;
     border-radius: 6px;

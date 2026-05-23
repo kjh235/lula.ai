@@ -121,24 +121,31 @@ def customer_detail(customer_id):
 @app.route("/inventory")
 def inventory():
     conn = get_conn()
-    products = [dict(r) for r in conn.execute(
+    raw = conn.execute(
         "SELECT ProductSKU, ProductName, ProductStyle, ProductSize, "
         "UnitPrice, SizingFamily, SizeNormalized FROM Products ORDER BY ProductStyle, ProductSize"
+    ).fetchall()
+    products = []
+    for r in raw:
+        p = dict(r)
+        price = p['UnitPrice']
+        if isinstance(price, str):
+            price = float(price.replace('$', '').replace(',', '') or 0)
+        p['UnitPrice'] = float(price or 0)
+        products.append(p)
+
+    style_counts = [dict(r) for r in conn.execute(
+        "SELECT ProductStyle, COUNT(*) AS cnt FROM Products "
+        "GROUP BY ProductStyle ORDER BY cnt DESC"
     ).fetchall()]
 
-    family_counts = [dict(r) for r in conn.execute(
-        "SELECT SizingFamily, COUNT(*) AS cnt FROM Products GROUP BY SizingFamily ORDER BY cnt DESC"
-    ).fetchall()]
-
-    total_value = conn.execute(
-        "SELECT COALESCE(SUM(UnitPrice), 0) FROM Products"
-    ).fetchone()[0]
+    total_value = sum(p['UnitPrice'] for p in products)
 
     conn.close()
     return render_template(
         'inventory.html',
         products=products,
-        family_counts=family_counts,
+        style_counts=style_counts,
         total_value=total_value,
     )
 
