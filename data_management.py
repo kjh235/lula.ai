@@ -2,6 +2,7 @@ import sqlite3
 import os
 import binascii
 import re
+import json
 import logging
 from datetime import datetime
 
@@ -247,39 +248,14 @@ def insert_product(dbconn, productrec):
         pass
 
 
-def update_product(dbconn):
+def update_product(dbconn, translations_path=None):
     import pandas as pd
     UUID = binascii.b2a_hex(os.urandom(12))
     cursor = dbconn.cursor()
-    translations = {
-        "HW23": "Witchful Thinking Halloween",
-        "CZY23": "Cozy Cozy",
-        "CZY22": "Cozy",
-        "CZY21": "Cozy",
-        "CZY20": "Cozy",
-        "Flare Jean": "Denim Flared",
-        "OTD23": "Great Outdoors 2023",
-        "Single Print Leggings": "Single Pack Leggings - Prints",
-        "RSRT22": "Resort 2022",
-        "RSRT23 ": "",
-        "CRER23": "Career Career",
-        "CRER22": "Career 2022",
-        "4J23": "Americana 2023",
-        "4J22": "Americana 2022",
-        "DREAM22": "",
-        "DREAM21": "",
-        "High Rise Slim Straight": "",
-        "SP22 ": "",
-        "VL22 ": "",
-        "HW22": "Halloween 2022",
-        "HW21": "Halloween 2021",
-        "BOHO22 ": "",
-        "LUXE21 ": "",
-        "DNM21 ": "",
-        "DR21 ": "",
-        "BCA21": "BCA 2021",
-        "ATR23": "Animal"
-    }
+    if translations_path is None:
+        translations_path = os.path.join(os.path.dirname(__file__), "product_name_translations.json")
+    with open(translations_path, "r") as f:
+        translations = json.load(f)
     df_prod = pd.read_sql_query("SELECT ProductID, ProductName from Products", dbconn)
     for index, row in df_prod.iterrows():
         ProductID = row['ProductID']
