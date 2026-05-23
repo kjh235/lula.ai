@@ -754,3 +754,34 @@ img { max-width: 100%; display: block; }
   .pricing-card.featured { transform: none; }
   .signup-form { padding: 0 8px; }
 }
+
+.subscribe-card {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 24px;
+    max-width: 400px;
+    margin-top: 20px;
+}
+
+.subscribe-card h2 {
+    margin-top: 0;
+}
+
+button {
+    background-color: #0066cc;
+    color: #fff;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 4px;
+    font-size: 1em;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #0052a3;
+}
+
+button:disabled {
+    background-color: #999;
+    cursor: not-allowed;
+}

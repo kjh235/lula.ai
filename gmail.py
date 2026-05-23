@@ -22,7 +22,7 @@ def gmail_creds():
         creds = Credentials.from_authorized_user_file('token.json', SCOPES)
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+        if creds and not creds.expired:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
