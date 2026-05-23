@@ -1,0 +1,4 @@
+- [ ] Add a Trending Sales widget on the Dashboard
+- [ ] Add a Recent Purchase Order "sell-thru" widget on the Dashboard
+- [ ] A list of Customers who don't have an order for 120 days
+- [ ] A list sizes a Customer would wear in different styles
