@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import binascii
 from datetime import datetime
 
@@ -217,3 +218,28 @@ def api_feedback():
         conn.close()
 
     return jsonify({"status": "saved", "feedback_id": fid}), 201
+
+
+@app.route("/admin/sync-status")
+def sync_status():
+    master_path = app.config['MASTER_DB_PATH']
+    try:
+        conn = sqlite3.connect(master_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT TableName, LastSyncedAt, RowsSynced FROM SyncLog ORDER BY TableName"
+        ).fetchall()
+        conn.close()
+        return jsonify({"tables": [dict(r) for r in rows]})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/admin/sync-now", methods=["POST"])
+def sync_now():
+    from app.master_sync import run_full_sync
+    try:
+        result = run_full_sync(app.config['DB_PATH'], app.config['MASTER_DB_PATH'])
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
