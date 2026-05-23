@@ -10,6 +10,7 @@ from app.recommendations import (
     get_customer_purchase_history,
     get_customer_info,
     recommend_for_customer,
+    recommend_purchase_order,
 )
 
 
@@ -181,6 +182,30 @@ def orders():
     ).fetchall()]
     conn.close()
     return render_template('orders.html', orders=all_orders)
+
+
+@app.route("/purchase-order")
+def purchase_order():
+    conn = get_conn()
+    families = [r[0] for r in conn.execute(
+        "SELECT DISTINCT SizingFamily FROM Products WHERE SizingFamily IS NOT NULL ORDER BY SizingFamily"
+    ).fetchall()]
+    conn.close()
+
+    selected_family = request.args.get('family', '')
+    total_qty = request.args.get('qty', 0, type=int)
+    result = None
+
+    if selected_family and total_qty > 0:
+        result = recommend_purchase_order(selected_family, total_qty)
+
+    return render_template(
+        'purchase_order.html',
+        families=families,
+        selected_family=selected_family,
+        total_qty=total_qty,
+        result=result,
+    )
 
 
 @app.route("/api/customers/<customer_id>/recommendations")

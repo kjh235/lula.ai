@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% set active_page = 'purchase_order' %}
+{% block title %}Order Planning{% endblock %}
+{% block page_title %}Purchase Order Planning{% endblock %}
+
+{% block content %}
+<div style="padding: 28px 32px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>Size Quantity Recommendation</h3>
+        </div>
+        <div class="card-body">
+            <p style="color: var(--text-light); margin-bottom: 20px;">
+                Based on the last 90 days of sales, this tool recommends how many of each size to order based on your active customers' purchasing patterns.
+            </p>
+            <form method="GET" action="/purchase-order" class="po-form">
+                <div class="po-form-row">
+                    <div class="po-form-group">
+                        <label for="family">Sizing Family</label>
+                        <select name="family" id="family" class="po-select" required>
+                            <option value="">Select a sizing family...</option>
+                            {% for f in families %}
+                            <option value="{{ f }}" {% if f == selected_family %}selected{% endif %}>{{ f | capitalize }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="po-form-group">
+                        <label for="qty">Total Quantity</label>
+                        <input type="number" name="qty" id="qty" class="po-input" min="1" max="999" value="{{ total_qty or '' }}" placeholder="e.g. 24" required>
+                    </div>
+                    <div class="po-form-group" style="align-self: flex-end;">
+                        <button type="submit" class="btn btn-primary">Get Recommendation</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if result %}
+<div style="padding: 0 32px;">
+    <div class="stats-grid" style="padding: 0 0 20px;">
+        <div class="stat-card">
+            <div class="stat-value">{{ result.active_customers }}</div>
+            <div class="stat-label">Active Customers</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ result.days }} days</div>
+            <div class="stat-label">Analysis Window</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ result.family | capitalize }}</div>
+            <div class="stat-label">Sizing Family</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ total_qty }}</div>
+            <div class="stat-label">Total Order Qty</div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 32px;">
+        <div class="card-header">
+            <h3>Recommended Size Breakdown</h3>
+        </div>
+        <div class="card-body">
+            {% if result.sizes %}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Size</th>
+                        <th>Active Customers</th>
+                        <th>% of Demand</th>
+                        <th>Recommended Qty</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in result.sizes %}
+                    <tr {% if s.qty > 0 %}class="po-has-qty"{% endif %}>
+                        <td><span class="badge">{{ s.size }}</span></td>
+                        <td>{{ s.customers }}</td>
+                        <td>{{ s.pct }}%</td>
+                        <td><strong>{{ s.qty }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight: 700; border-top: 2px solid var(--border);">
+                        <td>Total</td>
+                        <td>{{ result.active_customers }}</td>
+                        <td>100%</td>
+                        <td>{{ result.sizes | sum(attribute='qty') }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <p>No sales data found for this sizing family in the last {{ result.days }} days.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

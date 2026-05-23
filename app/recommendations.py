@@ -1,9 +1,10 @@
+import math
 import os
 import pickle
 from collections import defaultdict
 
 from app.db import get_conn
-from app.sizing import normalize_size
+from app.sizing import normalize_size, available_sizes_for_family
 
 ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ml', 'artifacts')
 
@@ -164,3 +165,98 @@ def recommend_for_customer(customer_id, n=5):
         })
 
     return {'recommendations': recommendations}
+
+
+def recommend_purchase_order(sizing_family, total_qty, days=90):
+    conn = get_conn()
+
+    max_date_row = conn.execute(
+        "SELECT MAX(COALESCE(PaidDate, InvoiceDate)) AS md FROM Orders"
+    ).fetchone()
+    max_date = max_date_row['md'] if max_date_row else None
+    if not max_date:
+        conn.close()
+        return {'sizes': [], 'active_customers': 0, 'days': days, 'family': sizing_family}
+
+    rows = conn.execute(
+        "SELECT o.OrderEmail, p.SizeNormalized, "
+        "MAX(COALESCE(o.PaidDate, o.InvoiceDate)) AS latest "
+        "FROM Orders o "
+        "JOIN OrderItems oi ON o.OrderNumber = oi.OrderNumber "
+        "JOIN Products p ON p.InvProductName = oi.ProductName "
+        "WHERE o.OrderType = 'RETAIL' "
+        "AND p.SizingFamily = ? "
+        "AND COALESCE(o.PaidDate, o.InvoiceDate) >= date(?, '-' || ? || ' days') "
+        "GROUP BY o.OrderEmail, p.SizeNormalized "
+        "ORDER BY latest DESC",
+        (sizing_family, max_date, str(days))
+    ).fetchall()
+    conn.close()
+
+    # Take each customer's most recent size purchase only
+    customer_size = {}
+    for r in rows:
+        email = r['OrderEmail']
+        if email not in customer_size:
+            customer_size[email] = normalize_size(r['SizeNormalized'])
+
+    size_counts = defaultdict(int)
+    for size in customer_size.values():
+        size_counts[size] += 1
+
+    active_customers = len(customer_size)
+    if active_customers == 0:
+        return {'sizes': [], 'active_customers': 0, 'days': days, 'family': sizing_family}
+
+    ordered_sizes = available_sizes_for_family(sizing_family)
+    size_order = {token: ordinal for ordinal, token in ordered_sizes}
+
+    results = []
+    for ordinal, token in ordered_sizes:
+        count = size_counts.get(token, 0)
+        pct = (count / active_customers * 100) if active_customers else 0
+        raw_qty = total_qty * count / active_customers if active_customers else 0
+        results.append({
+            'size': token,
+            'customers': count,
+            'pct': round(pct, 1),
+            'raw_qty': raw_qty,
+            'qty': math.floor(raw_qty),
+        })
+
+    # Largest-remainder rounding so quantities sum to total_qty
+    allocated = sum(r['qty'] for r in results)
+    remainder = total_qty - allocated
+    by_fraction = sorted(
+        range(len(results)),
+        key=lambda i: results[i]['raw_qty'] - results[i]['qty'],
+        reverse=True,
+    )
+    for i in by_fraction:
+        if remainder <= 0:
+            break
+        if results[i]['customers'] > 0:
+            results[i]['qty'] += 1
+            remainder -= 1
+    # If still short (more units than customers), distribute to top sizes
+    if remainder > 0:
+        by_customers = sorted(
+            range(len(results)),
+            key=lambda i: results[i]['customers'],
+            reverse=True,
+        )
+        while remainder > 0:
+            for i in by_customers:
+                if results[i]['customers'] > 0 and remainder > 0:
+                    results[i]['qty'] += 1
+                    remainder -= 1
+
+    for r in results:
+        del r['raw_qty']
+
+    return {
+        'sizes': results,
+        'active_customers': active_customers,
+        'days': days,
+        'family': sizing_family,
+    }
