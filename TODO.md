@@ -2,3 +2,5 @@
 - [ ] Add a Recent Purchase Order "sell-thru" widget on the Dashboard
 - [ ] A list of Customers who don't have an order for 120 days
 - [ ] A list sizes a Customer would wear in different styles
+- [ ] Shipping,Fees and Taxes spend widget
+- [ ] Add Transfer_In Order products into Inventory
