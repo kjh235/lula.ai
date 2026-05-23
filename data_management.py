@@ -225,7 +225,7 @@ def insert_customer(dbconn, customerrec):
     cursor = dbconn.cursor()
     try:
         cursor.execute("INSERT INTO Customers VALUES (?, ?, ?, ?, null)",
-                       (UUID, customerrec[0], customerrec[1], customerrec[2])
+                       (UUID, customerrec[1], customerrec[0], customerrec[2])
                        )
         dbconn.commit()
         print("customer saved")
