@@ -47,11 +47,11 @@ def dashboard():
     ).fetchall()]
 
     top_customers = [dict(r) for r in conn.execute(
-        "SELECT c.CustomerID, c.CustomerName, "
+        "SELECT c.CustomerID, c.CustomerEmail AS CustomerName, "
         "COALESCE(SUM(o.PaidTotal), 0) AS LTV, "
         "COUNT(o.OrderNumber) AS OrderCount "
         "FROM Customers c "
-        "LEFT JOIN Orders o ON c.CustomerEmail = o.OrderEmail AND o.OrderType = 'RETAIL' "
+        "LEFT JOIN Orders o ON c.CustomerName = o.OrderEmail AND o.OrderType = 'RETAIL' "
         "WHERE c.CustomerType = 'RETAIL' "
         "GROUP BY c.CustomerID "
         "ORDER BY LTV DESC LIMIT 10"
@@ -75,12 +75,12 @@ def dashboard():
 def customers():
     conn = get_conn()
     rows = conn.execute(
-        "SELECT c.CustomerID, c.CustomerName, c.CustomerEmail, c.CustomerType, "
+        "SELECT c.CustomerID, c.CustomerEmail AS CustomerName, c.CustomerName AS CustomerEmail, c.CustomerType, "
         "COALESCE(SUM(o.PaidTotal), 0) AS LTV, "
         "COALESCE(SUM(o.PaidPieces), 0) AS TotalPieces, "
         "COUNT(o.OrderNumber) AS OrderCount "
         "FROM Customers c "
-        "LEFT JOIN Orders o ON c.CustomerEmail = o.OrderEmail AND o.OrderType = 'RETAIL' "
+        "LEFT JOIN Orders o ON c.CustomerName = o.OrderEmail AND o.OrderType = 'RETAIL' "
         "WHERE c.CustomerType = 'RETAIL' "
         "GROUP BY c.CustomerID "
         "ORDER BY LTV DESC"
@@ -174,9 +174,9 @@ def orders():
     all_orders = [dict(r) for r in conn.execute(
         "SELECT o.OrderNumber, o.OrderEmail, o.OrderType, o.InvoiceDate, "
         "o.PaidDate, o.InvTotal, o.PaidTotal, o.InvPieces, o.PaidPieces, "
-        "c.CustomerName "
+        "c.CustomerEmail AS CustomerName "
         "FROM Orders o "
-        "LEFT JOIN Customers c ON c.CustomerEmail = o.OrderEmail "
+        "LEFT JOIN Customers c ON c.CustomerName = o.OrderEmail "
         "ORDER BY o.InvoiceDate DESC"
     ).fetchall()]
     conn.close()

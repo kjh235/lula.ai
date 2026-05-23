@@ -31,12 +31,12 @@ def get_customer_purchase_history(customer_id):
     conn = get_conn()
     cid = customer_id.encode() if isinstance(customer_id, str) else customer_id
     rows = conn.execute(
-        "SELECT c.CustomerID, c.CustomerName, c.CustomerEmail, "
+        "SELECT c.CustomerID, c.CustomerEmail AS CustomerName, c.CustomerName AS CustomerEmail, "
         "o.OrderNumber, o.InvoiceDate, o.PaidDate, "
         "oi.ProductName, oi.UnitPrice, oi.TotalPrice, oi.OrderLineItem, "
         "p.ProductSKU, p.ProductStyle, p.ProductSize, p.SizingFamily, p.SizeNormalized "
         "FROM Customers c "
-        "JOIN Orders o ON c.CustomerEmail = o.OrderEmail "
+        "JOIN Orders o ON c.CustomerName = o.OrderEmail "
         "JOIN OrderItems oi ON o.OrderNumber = oi.OrderNumber "
         "LEFT JOIN Products p ON p.InvProductName = oi.ProductName "
         "WHERE c.CustomerID = ? AND o.OrderType = 'RETAIL' "
@@ -67,7 +67,7 @@ def get_customer_info(customer_id):
     conn = get_conn()
     cid = customer_id.encode() if isinstance(customer_id, str) else customer_id
     row = conn.execute(
-        "SELECT CustomerID, CustomerName, CustomerEmail, CustomerType "
+        "SELECT CustomerID, CustomerEmail AS CustomerName, CustomerName AS CustomerEmail, CustomerType "
         "FROM Customers WHERE CustomerID = ?",
         (cid,)
     ).fetchone()
