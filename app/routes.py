@@ -85,7 +85,13 @@ def customers():
         "ORDER BY LTV DESC"
     ).fetchall()
     conn.close()
-    return render_template('customers.html', customers=[dict(r) for r in rows])
+    cust_list = []
+    for r in rows:
+        d = dict(r)
+        if isinstance(d.get('CustomerID'), bytes):
+            d['CustomerID'] = d['CustomerID'].decode()
+        cust_list.append(d)
+    return render_template('customers.html', customers=cust_list)
 
 
 @app.route("/customers/<customer_id>")
@@ -99,13 +105,21 @@ def customer_detail(customer_id):
     conn = get_conn()
     ltv_row = conn.execute(
         "SELECT COALESCE(SUM(PaidTotal), 0) AS LTV, COALESCE(SUM(PaidPieces), 0) AS Pieces, "
-        "COUNT(OrderNumber) AS OrderCount "
+        "COUNT(OrderNumber) AS OrderCount, "
+        "CASE WHEN COUNT(OrderNumber) > 0 THEN COALESCE(SUM(PaidTotal), 0) / COUNT(OrderNumber) ELSE 0 END AS AvgOrderValue, "
+        "MIN(COALESCE(PaidDate, InvoiceDate)) AS FirstOrderDate, "
+        "MAX(COALESCE(PaidDate, InvoiceDate)) AS LastOrderDate "
         "FROM Orders WHERE OrderEmail = ? AND OrderType = 'RETAIL'",
         (customer['CustomerEmail'],)
     ).fetchone()
-    conn.close()
 
-    recs = recommend_for_customer(customer_id, n=5)
+    recent_orders = [dict(r) for r in conn.execute(
+        "SELECT OrderNumber, InvoiceDate, PaidDate, PaidTotal, PaidPieces "
+        "FROM Orders WHERE OrderEmail = ? AND OrderType = 'RETAIL' "
+        "ORDER BY COALESCE(PaidDate, InvoiceDate) DESC LIMIT 5",
+        (customer['CustomerEmail'],)
+    ).fetchall()]
+    conn.close()
 
     return render_template(
         'customer.html',
@@ -114,7 +128,10 @@ def customer_detail(customer_id):
         ltv=ltv_row['LTV'] if ltv_row else 0,
         pieces=int(ltv_row['Pieces']) if ltv_row else 0,
         order_count=ltv_row['OrderCount'] if ltv_row else 0,
-        recommendations=recs.get('recommendations', []),
+        avg_order_value=ltv_row['AvgOrderValue'] if ltv_row else 0,
+        first_order_date=ltv_row['FirstOrderDate'] if ltv_row else None,
+        last_order_date=ltv_row['LastOrderDate'] if ltv_row else None,
+        recent_orders=recent_orders,
     )
 
 

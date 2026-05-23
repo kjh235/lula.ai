@@ -28,6 +28,7 @@ def _load_artifacts():
 
 def get_customer_purchase_history(customer_id):
     conn = get_conn()
+    cid = customer_id.encode() if isinstance(customer_id, str) else customer_id
     rows = conn.execute(
         "SELECT c.CustomerID, c.CustomerName, c.CustomerEmail, "
         "o.OrderNumber, o.InvoiceDate, o.PaidDate, "
@@ -39,7 +40,7 @@ def get_customer_purchase_history(customer_id):
         "LEFT JOIN Products p ON p.InvProductName = oi.ProductName "
         "WHERE c.CustomerID = ? AND o.OrderType = 'RETAIL' "
         "ORDER BY o.InvoiceDate DESC",
-        (customer_id,)
+        (cid,)
     ).fetchall()
     conn.close()
 
@@ -63,14 +64,18 @@ def get_customer_purchase_history(customer_id):
 
 def get_customer_info(customer_id):
     conn = get_conn()
+    cid = customer_id.encode() if isinstance(customer_id, str) else customer_id
     row = conn.execute(
         "SELECT CustomerID, CustomerName, CustomerEmail, CustomerType "
         "FROM Customers WHERE CustomerID = ?",
-        (customer_id,)
+        (cid,)
     ).fetchone()
     conn.close()
     if row:
-        return dict(row)
+        info = dict(row)
+        if isinstance(info.get('CustomerID'), bytes):
+            info['CustomerID'] = info['CustomerID'].decode()
+        return info
     return None
 
 
