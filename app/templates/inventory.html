@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set active_page = 'inventory' %}
+{% block title %}Inventory{% endblock %}
+{% block page_title %}Inventory{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ products | length }}</div>
+        <div class="stat-label">Total SKUs</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ "%.2f" | format(total_value) }}</div>
+        <div class="stat-label">Total Inventory Value</div>
+    </div>
+    {% for fc in family_counts %}
+    <div class="stat-card">
+        <div class="stat-value">{{ fc.cnt }}</div>
+        <div class="stat-label">{{ fc.SizingFamily or 'Uncategorized' }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+<div style="padding: 0 32px 32px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>Product Catalog</h3>
+            <input type="text" class="search-box" id="inventorySearch" placeholder="Search products...">
+        </div>
+        <div class="card-body">
+            {% if products %}
+            <table class="data-table" id="inventoryTable">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Product</th>
+                        <th>Style</th>
+                        <th>Size</th>
+                        <th>Family</th>
+                        <th>Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in products %}
+                    <tr>
+                        <td>{{ p.ProductSKU }}</td>
+                        <td>{{ p.ProductName }}</td>
+                        <td>{{ p.ProductStyle }}</td>
+                        <td><span class="badge">{{ p.SizeNormalized or p.ProductSize }}</span></td>
+                        <td>{{ p.SizingFamily or '' }}</td>
+                        <td>${{ "%.2f" | format(p.UnitPrice) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <p>No products in inventory.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('inventorySearch').addEventListener('input', function() {
+    var filter = this.value.toLowerCase();
+    var rows = document.querySelectorAll('#inventoryTable tbody tr');
+    rows.forEach(function(row) {
+        row.style.display = row.textContent.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

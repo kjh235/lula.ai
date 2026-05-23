@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set active_page = 'orders' %}
+{% block title %}Orders{% endblock %}
+{% block page_title %}Orders{% endblock %}
+
+{% block content %}
+<div style="padding: 0 32px 32px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>All Orders</h3>
+            <input type="text" class="search-box" id="orderSearch" placeholder="Search orders...">
+        </div>
+        <div class="card-body">
+            {% if orders %}
+            <table class="data-table" id="orderTable">
+                <thead>
+                    <tr>
+                        <th>Order #</th>
+                        <th>Customer</th>
+                        <th>Type</th>
+                        <th>Invoice Date</th>
+                        <th>Paid Date</th>
+                        <th>Total</th>
+                        <th>Pieces</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in orders %}
+                    <tr>
+                        <td>{{ o.OrderNumber }}</td>
+                        <td>{{ o.CustomerName or o.OrderEmail }}</td>
+                        <td><span class="badge {% if o.OrderType == 'RETAIL' %}badge-high{% elif o.OrderType and 'TRANSFER' in o.OrderType %}badge-medium{% else %}badge-low{% endif %}">{{ o.OrderType or 'N/A' }}</span></td>
+                        <td>{{ o.InvoiceDate or '' }}</td>
+                        <td>{{ o.PaidDate or '' }}</td>
+                        <td>${{ "%.2f" | format(o.PaidTotal or o.InvTotal or 0) }}</td>
+                        <td>{{ (o.PaidPieces or o.InvPieces or 0) | int }}</td>
+                        <td>
+                            {% if o.PaidDate %}
+                            <span class="badge badge-high">Paid</span>
+                            {% else %}
+                            <span class="badge badge-low">Unpaid</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <p>No orders found.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('orderSearch').addEventListener('input', function() {
+    var filter = this.value.toLowerCase();
+    var rows = document.querySelectorAll('#orderTable tbody tr');
+    rows.forEach(function(row) {
+        row.style.display = row.textContent.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

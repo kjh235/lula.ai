@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lula.ai — AI-Powered Intelligence for Your LuLaRoe Business</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="landing-page">
+    <nav>
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">Lula.ai</a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#pricing">Pricing</a>
+                <a href="/dashboard" class="btn btn-secondary">Sign In</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <h1>AI-Powered Intelligence for Your LuLaRoe Business</h1>
+        <p>Track sales, manage inventory, understand your customers, and get personalized product recommendations — all in one place.</p>
+        <a href="#signup" class="cta-btn">Get Started Free</a>
+    </section>
+
+    <section class="features" id="features">
+        <h2>Everything you need to grow</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F4CA;</div>
+                <h3>Sales Dashboard</h3>
+                <p>Real-time sales metrics, month-to-date revenue tracking, and order analytics at a glance.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F4E6;</div>
+                <h3>Smart Inventory</h3>
+                <p>Track every piece across purchase orders, retail, and transfers. Know exactly what you have and what's selling.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x2728;</div>
+                <h3>AI Recommendations</h3>
+                <p>Machine learning analyzes purchase history and fit data to recommend the right product in the right size for every customer.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="pricing" id="pricing">
+        <h2>Simple, transparent pricing</h2>
+        <div class="pricing-grid">
+            <div class="pricing-card">
+                <h3>Starter</h3>
+                <div class="pricing-price">$0<span>/mo</span></div>
+                <ul>
+                    <li>Up to 50 customers</li>
+                    <li>Basic dashboard</li>
+                    <li>Email parsing</li>
+                </ul>
+                <a href="#signup" class="btn btn-secondary">Get Started</a>
+            </div>
+            <div class="pricing-card featured">
+                <h3>Pro</h3>
+                <div class="pricing-price">$29<span>/mo</span></div>
+                <ul>
+                    <li>Unlimited customers</li>
+                    <li>AI recommendations</li>
+                    <li>Fit analytics</li>
+                    <li>Priority support</li>
+                </ul>
+                <a href="#signup" class="btn btn-primary">Get Started</a>
+            </div>
+            <div class="pricing-card">
+                <h3>Enterprise</h3>
+                <div class="pricing-price">$99<span>/mo</span></div>
+                <ul>
+                    <li>Everything in Pro</li>
+                    <li>API access</li>
+                    <li>Custom training</li>
+                    <li>Dedicated support</li>
+                </ul>
+                <a href="#signup" class="btn btn-secondary">Get Started</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="signup-section" id="signup">
+        <h2>Create your account</h2>
+        <form class="signup-form" method="POST" action="/signup">
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Create Account</button>
+        </form>
+    </section>
+
+    <footer class="footer">
+        <p>&copy; 2024 Lula.ai &mdash; Built for LuLaRoe consultants</p>
+    </footer>
+</body>
+</html>
