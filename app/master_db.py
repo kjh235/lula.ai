@@ -84,6 +84,25 @@ def init_master_db(path):
     ''')
 
     c.execute('''
+    CREATE TABLE IF NOT EXISTS InventoryLedger (
+        LedgerID    TEXT PRIMARY KEY,
+        ProductName TEXT NOT NULL,
+        Delta       INTEGER NOT NULL,
+        EventType   TEXT NOT NULL
+                    CHECK (EventType IN (
+                        'RETAIL_SALE',
+                        'TRANSFER_IN',
+                        'TRANSFER_OUT',
+                        'PO_RECEIVED',
+                        'MANUAL_ADJUSTMENT'
+                    )),
+        OrderNumber TEXT,
+        EventDate   DATETIME NOT NULL,
+        UNIQUE (OrderNumber, ProductName)
+    )
+    ''')
+
+    c.execute('''
     CREATE TABLE IF NOT EXISTS SyncLog (
         TableName TEXT PRIMARY KEY,
         LastSyncedAt TEXT NOT NULL,

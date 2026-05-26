@@ -10,6 +10,10 @@
         <div class="stat-label">Total SKUs</div>
     </div>
     <div class="stat-card">
+        <div class="stat-value">{{ total_units }}</div>
+        <div class="stat-label">Total Units on Hand</div>
+    </div>
+    <div class="stat-card">
         <div class="stat-value">${{ "%.2f" | format(total_value) }}</div>
         <div class="stat-label">Total Inventory Value</div>
     </div>
@@ -56,6 +60,7 @@
                         <th>Size</th>
                         <th>Family</th>
                         <th>Price</th>
+                        <th>Stock</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -67,6 +72,7 @@
                         <td><span class="badge">{{ p.SizeNormalized or p.ProductSize }}</span></td>
                         <td>{{ p.SizingFamily or '' }}</td>
                         <td>${{ "%.2f" | format(p.UnitPrice) }}</td>
+                        <td>{{ p.Quantity }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

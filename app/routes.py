@@ -141,8 +141,13 @@ def customer_detail(customer_id):
 def inventory():
     conn = get_conn()
     raw = conn.execute(
-        "SELECT ProductSKU, ProductName, ProductStyle, ProductSize, "
-        "UnitPrice, SizingFamily, SizeNormalized FROM Products ORDER BY ProductStyle, ProductSize"
+        "SELECT p.ProductSKU, p.ProductName, p.ProductStyle, p.ProductSize, "
+        "p.UnitPrice, p.SizingFamily, p.SizeNormalized, "
+        "COALESCE(SUM(l.Delta), 0) AS Quantity "
+        "FROM Products p "
+        "LEFT JOIN InventoryLedger l ON l.ProductName = p.ProductName "
+        "GROUP BY p.ProductSKU "
+        "ORDER BY p.ProductStyle, p.ProductSize"
     ).fetchall()
     products = []
     for r in raw:
@@ -159,6 +164,7 @@ def inventory():
     ).fetchall()]
 
     total_value = sum(p['UnitPrice'] for p in products)
+    total_units = sum(p['Quantity'] for p in products)
 
     conn.close()
     return render_template(
@@ -166,6 +172,7 @@ def inventory():
         products=products,
         style_counts=style_counts,
         total_value=total_value,
+        total_units=total_units,
     )
 
 
