@@ -160,6 +160,14 @@ def init_db(db_path="app/bless.db"):
         cursor.execute("ALTER TABLE Products ADD COLUMN SizingFamily TEXT")
     except sqlite3.OperationalError:
         pass
+    try:
+        cursor.execute("ALTER TABLE Products ADD COLUMN Quantity INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE Orders ADD COLUMN InventoryAdjusted INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS FitFeedback (
@@ -606,3 +614,151 @@ def init_task(conn, task):
     except:
         print("task exist")
         pass
+
+
+def adjust_inventory_for_order(conn, order_number):
+    """Adjust product inventory quantities based on a single paid order.
+
+    Rules:
+      - RETAIL paid orders    → subtract each item from inventory
+      - TRANSFER_IN paid orders  → add each item to inventory
+      - TRANSFER_OUT paid orders → subtract each item from inventory
+
+    The function is idempotent: it sets ``InventoryAdjusted = 1`` on the
+    order row after applying changes and skips any order that already has
+    that flag set, preventing double-counting if an email is re-processed.
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+        order_number: the ``OrderNumber`` string to process
+
+    Returns:
+        int: number of product rows whose ``Quantity`` was updated,
+             or 0 if the order was skipped (not found, unpaid, wrong type,
+             already adjusted, or no items).
+    """
+    cursor = conn.cursor()
+
+    row = cursor.execute(
+        "SELECT OrderType, PaidDate, InventoryAdjusted "
+        "FROM Orders WHERE OrderNumber = ?",
+        (order_number,)
+    ).fetchone()
+
+    if row is None:
+        logger.warning("adjust_inventory_for_order: order %s not found", order_number)
+        return 0
+
+    order_type, paid_date, already_adjusted = row[0], row[1], row[2]
+
+    if paid_date is None:
+        logger.info(
+            "adjust_inventory_for_order: order %s is not paid yet — skipping",
+            order_number,
+        )
+        return 0
+
+    if already_adjusted:
+        logger.info(
+            "adjust_inventory_for_order: order %s already adjusted — skipping",
+            order_number,
+        )
+        return 0
+
+    if order_type not in ("RETAIL", "TRANSFER_IN", "TRANSFER_OUT"):
+        logger.warning(
+            "adjust_inventory_for_order: order %s has unrecognised type '%s' — skipping",
+            order_number,
+            order_type,
+        )
+        return 0
+
+    # +1 for TRANSFER_IN (stock arrives), -1 for RETAIL / TRANSFER_OUT (stock leaves)
+    delta = 1 if order_type == "TRANSFER_IN" else -1
+
+    # Aggregate items — each OrderItems row is one unit of a product
+    items = cursor.execute(
+        "SELECT ProductName, COUNT(*) AS qty "
+        "FROM OrderItems WHERE OrderNumber = ? "
+        "GROUP BY ProductName",
+        (order_number,)
+    ).fetchall()
+
+    if not items:
+        logger.warning(
+            "adjust_inventory_for_order: no items found for order %s — skipping",
+            order_number,
+        )
+        return 0
+
+    adjustments = 0
+    for product_name, qty in items:
+        if product_name is None:
+            continue
+        cursor.execute(
+            "UPDATE Products SET Quantity = Quantity + ? WHERE ProductName = ?",
+            (delta * qty, product_name),
+        )
+        if cursor.rowcount > 0:
+            adjustments += cursor.rowcount
+            logger.info(
+                "adjust_inventory_for_order: %s '%s' by %d (order %s, type %s)",
+                "increased" if delta > 0 else "decreased",
+                product_name,
+                qty,
+                order_number,
+                order_type,
+            )
+
+    cursor.execute(
+        "UPDATE Orders SET InventoryAdjusted = 1 WHERE OrderNumber = ?",
+        (order_number,),
+    )
+    conn.commit()
+
+    logger.info(
+        "adjust_inventory_for_order: order %s (%s) complete — %d product(s) updated",
+        order_number,
+        order_type,
+        adjustments,
+    )
+    return adjustments
+
+
+def adjust_inventory_for_all_paid_orders(conn):
+    """Apply inventory adjustments for every eligible paid order not yet processed.
+
+    Useful for backfilling inventory counts from historical data or for
+    catching up after downtime.  Calls :func:`adjust_inventory_for_order`
+    for each qualifying order.
+
+    An order qualifies when:
+      - ``PaidDate IS NOT NULL``
+      - ``InventoryAdjusted = 0``
+      - ``OrderType`` is one of ``'RETAIL'``, ``'TRANSFER_IN'``, ``'TRANSFER_OUT'``
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+
+    Returns:
+        int: total number of product rows updated across all processed orders.
+    """
+    cursor = conn.cursor()
+    rows = cursor.execute(
+        "SELECT OrderNumber FROM Orders "
+        "WHERE PaidDate IS NOT NULL "
+        "  AND InventoryAdjusted = 0 "
+        "  AND OrderType IN ('RETAIL', 'TRANSFER_IN', 'TRANSFER_OUT')"
+    ).fetchall()
+
+    total_adjustments = 0
+    for (order_number,) in rows:
+        total_adjustments += adjust_inventory_for_order(conn, order_number)
+
+    logger.info(
+        "adjust_inventory_for_all_paid_orders: %d order(s) processed, "
+        "%d product adjustment(s) total",
+        len(rows),
+        total_adjustments,
+    )
+    return total_adjustments

@@ -94,6 +94,7 @@ def retailPaid(creds, search_query):
             data_management.update_paid_order(conn, summary, numberOfItems, email_time)
             for items in (orderItems,) if type(orderItems[0]) is not list else orderItems:
                 data_management.insert_order_item(conn, items, summary[3])
+            data_management.adjust_inventory_for_order(conn, summary[3])
 
         except:
             print(msg['id'])
@@ -167,6 +168,7 @@ def transferPaid(creds, search_query):
             data_management.update_paid_order(conn, summary, numberOfItems, email_time)
             for items in (orderItems,) if type(orderItems[0]) is not list else orderItems:
                 data_management.insert_order_item(conn, items, summary[3])
+            data_management.adjust_inventory_for_order(conn, summary[3])
         except:
             print(msg['id'])
             pass
