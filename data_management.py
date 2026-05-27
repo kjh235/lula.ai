@@ -262,9 +262,10 @@ def insert_customer(dbconn, customerrec):
 def insert_product(dbconn, productrec):
     UUID = binascii.b2a_hex(os.urandom(12))
     cursor = dbconn.cursor()
+    cost = float(productrec[2].replace('$', ''))
     try:
-        cursor.execute("INSERT INTO Products VALUES (?, ?, ?, ?, ?, ?, ?, null)",
-                   (UUID, productrec[0], productrec[1], productrec[4], productrec[3], productrec[2], productrec[5])
+        cursor.execute("INSERT INTO Products VALUES (?, ?, ?, ?, ?, ?, ?, null, null, null, 0)",
+                   (UUID, productrec[0], productrec[1], productrec[4], productrec[3], cost, productrec[5])
                    )
         dbconn.commit()
         print("product saved")
