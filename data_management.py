@@ -144,6 +144,26 @@ def init_db(db_path="app/bless.db"):
     ''')
 
     cursor.execute('''
+    CREATE TABLE IF NOT EXISTS InventoryLedger (
+        LedgerID    TEXT PRIMARY KEY,
+        ProductName TEXT NOT NULL,
+        Delta       INTEGER NOT NULL,
+        EventType   TEXT NOT NULL
+                    CHECK (EventType IN (
+                        'RETAIL_SALE',
+                        'TRANSFER_IN',
+                        'TRANSFER_OUT',
+                        'PO_RECEIVED',
+                        'MANUAL_ADJUSTMENT'
+                    )),
+        OrderNumber TEXT,
+        EventDate   DATETIME NOT NULL,
+        FOREIGN KEY (ProductName) REFERENCES Products(ProductName),
+        UNIQUE (OrderNumber, ProductName)
+    )
+    ''')
+
+    cursor.execute('''
     CREATE TABLE IF NOT EXISTS Tasks (
         taskID TEXT UNIQUE NOT NULL PRIMARY KEY,
         taskName TEXT UNIQUE NOT NULL,
@@ -153,19 +173,16 @@ def init_db(db_path="app/bless.db"):
     ''')
 
     try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ledger_product ON InventoryLedger(ProductName)")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
         cursor.execute("ALTER TABLE Products ADD COLUMN SizeNormalized TEXT")
     except sqlite3.OperationalError:
         pass
     try:
         cursor.execute("ALTER TABLE Products ADD COLUMN SizingFamily TEXT")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE Products ADD COLUMN Quantity INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE Orders ADD COLUMN InventoryAdjusted INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass
 
@@ -616,149 +633,305 @@ def init_task(conn, task):
         pass
 
 
-def adjust_inventory_for_order(conn, order_number):
-    """Adjust product inventory quantities based on a single paid order.
+def record_inventory_event(conn, product_name, delta, event_type, order_number, event_date):
+    """Insert a single row into InventoryLedger.
 
-    Rules:
-      - RETAIL paid orders    → subtract each item from inventory
-      - TRANSFER_IN paid orders  → add each item to inventory
-      - TRANSFER_OUT paid orders → subtract each item from inventory
-
-    The function is idempotent: it sets ``InventoryAdjusted = 1`` on the
-    order row after applying changes and skips any order that already has
-    that flag set, preventing double-counting if an email is re-processed.
+    Uses ``INSERT OR IGNORE`` so duplicate calls for the same
+    ``(order_number, product_name)`` combination are silently discarded —
+    the unique constraint provides idempotency with no extra bookkeeping.
 
     Args:
         conn: open sqlite3 connection to bless.db
-        order_number: the ``OrderNumber`` string to process
+        product_name (str): Products.ProductName (FK)
+        delta (int): stock change — positive = stock added, negative = stock removed
+        event_type (str): one of ``'RETAIL_SALE'``, ``'TRANSFER_IN'``,
+            ``'TRANSFER_OUT'``, ``'PO_RECEIVED'``, ``'MANUAL_ADJUSTMENT'``
+        order_number (str | None): Orders/PurchaseOrders.OrderNumber,
+            or ``None`` for manual adjustments
+        event_date: datetime or ISO string for when the event occurred
 
     Returns:
-        int: number of product rows whose ``Quantity`` was updated,
-             or 0 if the order was skipped (not found, unpaid, wrong type,
-             already adjusted, or no items).
+        bool: ``True`` if a new row was inserted, ``False`` if it already existed.
+    """
+    UUID = binascii.b2a_hex(os.urandom(12))
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR IGNORE INTO InventoryLedger "
+        "(LedgerID, ProductName, Delta, EventType, OrderNumber, EventDate) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (UUID, product_name, delta, event_type, order_number, event_date),
+    )
+    conn.commit()
+    inserted = cursor.rowcount > 0
+    if inserted:
+        logger.info(
+            "record_inventory_event: %+d '%s' [%s] order=%s",
+            delta, product_name, event_type, order_number,
+        )
+    return inserted
+
+
+def apply_order_to_inventory(conn, order_number):
+    """Record InventoryLedger events for all items in a single paid order.
+
+    Direction is determined by ``OrderType``:
+
+    ============  ===========  =============================
+    OrderType     Event type   Delta per item
+    ============  ===========  =============================
+    RETAIL        RETAIL_SALE  ``-count`` (stock leaves)
+    TRANSFER_IN   TRANSFER_IN  ``+count`` (stock arrives)
+    TRANSFER_OUT  TRANSFER_OUT ``-count`` (stock leaves)
+    ============  ===========  =============================
+
+    One ledger row is written per ``(OrderNumber, ProductName)`` group via
+    ``INSERT OR IGNORE``, so this function is safe to call repeatedly.
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+        order_number (str): ``Orders.OrderNumber`` to process
+
+    Returns:
+        int: number of new ledger rows inserted (0 if the order is not paid,
+             has an unrecognised type, was not found, or all rows already exist).
     """
     cursor = conn.cursor()
 
     row = cursor.execute(
-        "SELECT OrderType, PaidDate, InventoryAdjusted "
-        "FROM Orders WHERE OrderNumber = ?",
+        "SELECT OrderType, PaidDate FROM Orders WHERE OrderNumber = ?",
         (order_number,)
     ).fetchone()
 
     if row is None:
-        logger.warning("adjust_inventory_for_order: order %s not found", order_number)
+        logger.warning("apply_order_to_inventory: order %s not found", order_number)
         return 0
 
-    order_type, paid_date, already_adjusted = row[0], row[1], row[2]
+    order_type, paid_date = row[0], row[1]
 
     if paid_date is None:
         logger.info(
-            "adjust_inventory_for_order: order %s is not paid yet — skipping",
+            "apply_order_to_inventory: order %s not paid yet — skipping",
             order_number,
         )
         return 0
 
-    if already_adjusted:
-        logger.info(
-            "adjust_inventory_for_order: order %s already adjusted — skipping",
-            order_number,
-        )
-        return 0
-
-    if order_type not in ("RETAIL", "TRANSFER_IN", "TRANSFER_OUT"):
+    event_type_map = {
+        "RETAIL":       "RETAIL_SALE",
+        "TRANSFER_IN":  "TRANSFER_IN",
+        "TRANSFER_OUT": "TRANSFER_OUT",
+    }
+    if order_type not in event_type_map:
         logger.warning(
-            "adjust_inventory_for_order: order %s has unrecognised type '%s' — skipping",
-            order_number,
-            order_type,
+            "apply_order_to_inventory: order %s has unrecognised type '%s' — skipping",
+            order_number, order_type,
         )
         return 0
 
-    # +1 for TRANSFER_IN (stock arrives), -1 for RETAIL / TRANSFER_OUT (stock leaves)
-    delta = 1 if order_type == "TRANSFER_IN" else -1
+    event_type = event_type_map[order_type]
+    delta_sign = 1 if order_type == "TRANSFER_IN" else -1
 
-    # Aggregate items — each OrderItems row is one unit of a product
+    # One ledger row per (OrderNumber, ProductName) — count rows for quantity
     items = cursor.execute(
         "SELECT ProductName, COUNT(*) AS qty "
-        "FROM OrderItems WHERE OrderNumber = ? "
-        "GROUP BY ProductName",
+        "FROM OrderItems WHERE OrderNumber = ? GROUP BY ProductName",
         (order_number,)
     ).fetchall()
 
     if not items:
         logger.warning(
-            "adjust_inventory_for_order: no items found for order %s — skipping",
+            "apply_order_to_inventory: no items found for order %s — skipping",
             order_number,
         )
         return 0
 
-    adjustments = 0
+    inserted = 0
     for product_name, qty in items:
         if product_name is None:
             continue
-        cursor.execute(
-            "UPDATE Products SET Quantity = Quantity + ? WHERE ProductName = ?",
-            (delta * qty, product_name),
-        )
-        if cursor.rowcount > 0:
-            adjustments += cursor.rowcount
-            logger.info(
-                "adjust_inventory_for_order: %s '%s' by %d (order %s, type %s)",
-                "increased" if delta > 0 else "decreased",
-                product_name,
-                qty,
-                order_number,
-                order_type,
-            )
-
-    cursor.execute(
-        "UPDATE Orders SET InventoryAdjusted = 1 WHERE OrderNumber = ?",
-        (order_number,),
-    )
-    conn.commit()
+        if record_inventory_event(
+            conn,
+            product_name=product_name,
+            delta=delta_sign * qty,
+            event_type=event_type,
+            order_number=order_number,
+            event_date=paid_date,
+        ):
+            inserted += 1
 
     logger.info(
-        "adjust_inventory_for_order: order %s (%s) complete — %d product(s) updated",
-        order_number,
-        order_type,
-        adjustments,
+        "apply_order_to_inventory: order %s (%s) — %d ledger row(s) inserted",
+        order_number, order_type, inserted,
     )
-    return adjustments
+    return inserted
 
 
-def adjust_inventory_for_all_paid_orders(conn):
-    """Apply inventory adjustments for every eligible paid order not yet processed.
+def apply_purchase_order_to_inventory(conn, po_number):
+    """Record ``PO_RECEIVED`` InventoryLedger events for a wholesale purchase order.
 
-    Useful for backfilling inventory counts from historical data or for
-    catching up after downtime.  Calls :func:`adjust_inventory_for_order`
-    for each qualifying order.
+    Uses ``PurchaseOrderItems.Quantity`` for the delta (each PO line can be
+    multiple units, unlike retail ``OrderItems`` where each row = 1 unit).
+    Delta is always positive — wholesale stock arrives into inventory.
 
-    An order qualifies when:
-      - ``PaidDate IS NOT NULL``
-      - ``InventoryAdjusted = 0``
-      - ``OrderType`` is one of ``'RETAIL'``, ``'TRANSFER_IN'``, ``'TRANSFER_OUT'``
+    One ledger row per ``(OrderNumber, ProductName)`` group, idempotent via
+    ``INSERT OR IGNORE``.
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+        po_number (str): ``PurchaseOrders.OrderNumber`` to process
+
+    Returns:
+        int: number of new ledger rows inserted.
+    """
+    cursor = conn.cursor()
+
+    po_row = cursor.execute(
+        "SELECT OrderDate FROM PurchaseOrders WHERE OrderNumber = ?",
+        (po_number,)
+    ).fetchone()
+
+    if po_row is None:
+        logger.warning(
+            "apply_purchase_order_to_inventory: PO %s not found", po_number
+        )
+        return 0
+
+    event_date = po_row[0]
+
+    items = cursor.execute(
+        "SELECT ProductName, SUM(Quantity) AS total_qty "
+        "FROM PurchaseOrderItems "
+        "WHERE OrderNumber = ? AND ProductName IS NOT NULL "
+        "GROUP BY ProductName",
+        (po_number,)
+    ).fetchall()
+
+    if not items:
+        logger.warning(
+            "apply_purchase_order_to_inventory: no items for PO %s — skipping",
+            po_number,
+        )
+        return 0
+
+    inserted = 0
+    for product_name, total_qty in items:
+        if product_name is None or total_qty is None:
+            continue
+        if record_inventory_event(
+            conn,
+            product_name=product_name,
+            delta=int(total_qty),
+            event_type="PO_RECEIVED",
+            order_number=po_number,
+            event_date=event_date,
+        ):
+            inserted += 1
+
+    logger.info(
+        "apply_purchase_order_to_inventory: PO %s — %d ledger row(s) inserted",
+        po_number, inserted,
+    )
+    return inserted
+
+
+def get_product_quantity(conn, product_name):
+    """Return current on-hand stock count for a single product.
+
+    Computed as ``SUM(Delta)`` over all InventoryLedger rows for the product.
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+        product_name (str): ``Products.ProductName``
+
+    Returns:
+        int: current quantity (may be 0 or negative if data is incomplete).
+    """
+    row = conn.execute(
+        "SELECT COALESCE(SUM(Delta), 0) FROM InventoryLedger WHERE ProductName = ?",
+        (product_name,)
+    ).fetchone()
+    return int(row[0])
+
+
+def get_all_inventory_quantities(conn):
+    """Return current on-hand quantities for all products that have ledger activity.
+
+    Products with no ledger rows are not included (they implicitly have 0 stock).
 
     Args:
         conn: open sqlite3 connection to bless.db
 
     Returns:
-        int: total number of product rows updated across all processed orders.
+        dict: ``{product_name: quantity}`` for every ProductName in InventoryLedger.
     """
-    cursor = conn.cursor()
-    rows = cursor.execute(
+    rows = conn.execute(
+        "SELECT ProductName, COALESCE(SUM(Delta), 0) AS qty "
+        "FROM InventoryLedger GROUP BY ProductName"
+    ).fetchall()
+    return {row[0]: int(row[1]) for row in rows}
+
+
+def apply_all_paid_orders_to_inventory(conn):
+    """Apply inventory events for all paid orders not yet recorded in InventoryLedger.
+
+    Finds paid orders whose ``OrderNumber`` does not appear in
+    ``InventoryLedger``, then calls :func:`apply_order_to_inventory` for each.
+    Safe to re-run — already-processed orders produce no new rows via
+    ``INSERT OR IGNORE``.
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+
+    Returns:
+        int: total ledger rows inserted across all processed orders.
+    """
+    rows = conn.execute(
         "SELECT OrderNumber FROM Orders "
         "WHERE PaidDate IS NOT NULL "
-        "  AND InventoryAdjusted = 0 "
-        "  AND OrderType IN ('RETAIL', 'TRANSFER_IN', 'TRANSFER_OUT')"
+        "  AND OrderType IN ('RETAIL', 'TRANSFER_IN', 'TRANSFER_OUT') "
+        "  AND OrderNumber NOT IN ("
+        "      SELECT DISTINCT OrderNumber FROM InventoryLedger"
+        "      WHERE OrderNumber IS NOT NULL)"
     ).fetchall()
 
-    total_adjustments = 0
+    total = 0
     for (order_number,) in rows:
-        total_adjustments += adjust_inventory_for_order(conn, order_number)
+        total += apply_order_to_inventory(conn, order_number)
 
     logger.info(
-        "adjust_inventory_for_all_paid_orders: %d order(s) processed, "
-        "%d product adjustment(s) total",
-        len(rows),
-        total_adjustments,
+        "apply_all_paid_orders_to_inventory: %d order(s) processed, "
+        "%d ledger row(s) inserted",
+        len(rows), total,
     )
-    return total_adjustments
+    return total
+
+
+def apply_all_purchase_orders_to_inventory(conn):
+    """Apply ``PO_RECEIVED`` events for all purchase orders not yet in InventoryLedger.
+
+    Finds POs whose ``OrderNumber`` does not appear in ``InventoryLedger``,
+    then calls :func:`apply_purchase_order_to_inventory` for each.
+    Safe to re-run.
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+
+    Returns:
+        int: total ledger rows inserted.
+    """
+    rows = conn.execute(
+        "SELECT OrderNumber FROM PurchaseOrders "
+        "WHERE OrderNumber NOT IN ("
+        "    SELECT DISTINCT OrderNumber FROM InventoryLedger"
+        "    WHERE OrderNumber IS NOT NULL)"
+    ).fetchall()
+
+    total = 0
+    for (order_number,) in rows:
+        total += apply_purchase_order_to_inventory(conn, order_number)
+
+    logger.info(
+        "apply_all_purchase_orders_to_inventory: %d PO(s) processed, "
+        "%d ledger row(s) inserted",
+        len(rows), total,
+    )
+    return total

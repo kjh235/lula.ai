@@ -34,6 +34,11 @@ _TABLES = [
         "SELECT FeedbackID, CustomerID, ProductSKU, OrderNumber, SizePurchased, FitOutcome, Source, CreatedAt FROM FitFeedback",
         "INSERT OR REPLACE INTO FitFeedback VALUES (?,?,?,?,?,?,?,?)",
     ),
+    (
+        "InventoryLedger",
+        "SELECT LedgerID, ProductName, Delta, EventType, OrderNumber, EventDate FROM InventoryLedger",
+        "INSERT OR REPLACE INTO InventoryLedger (LedgerID, ProductName, Delta, EventType, OrderNumber, EventDate) VALUES (?,?,?,?,?,?)",
+    ),
 ]
 
 
