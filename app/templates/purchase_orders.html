@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% set active_page = 'purchase_orders' %}
+{% block title %}Purchase Orders{% endblock %}
+{% block page_title %}Purchase Orders{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ total_pos }}</div>
+        <div class="stat-label">Total POs</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ total_ordered }}</div>
+        <div class="stat-label">Units Ordered</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ overall_sell_thru }}%</div>
+        <div class="stat-label">Overall Sell-Through</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ "%.2f" | format(total_revenue) }}</div>
+        <div class="stat-label">Total Revenue</div>
+    </div>
+</div>
+
+<div style="padding: 0 32px 32px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>All Purchase Orders</h3>
+            <input type="text" class="search-box" id="poSearch" placeholder="Search orders...">
+        </div>
+        <div class="card-body">
+            {% if po_list %}
+            <table class="data-table" id="poTable">
+                <thead>
+                    <tr>
+                        <th>Order #</th>
+                        <th>Date</th>
+                        <th>Units Ordered</th>
+                        <th>Units Sold</th>
+                        <th>Sell-Through</th>
+                        <th>Cost</th>
+                        <th>Revenue</th>
+                        <th>Cost Recovery</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for po in po_list %}
+                    <tr style="cursor:pointer;" onclick="window.location='/purchase-orders/{{ po.OrderNumber }}'">
+                        <td><strong>{{ po.OrderNumber }}</strong></td>
+                        <td>{{ po.OrderDate[:10] if po.OrderDate else '—' }}</td>
+                        <td>{{ po.TotalUnitsOrdered }}</td>
+                        <td>{{ po.TotalUnitsSoldCapped }}</td>
+                        <td>
+                            <span class="badge {% if po.SellThroughPct >= 75 %}badge-high{% elif po.SellThroughPct >= 40 %}badge-medium{% else %}badge-low{% endif %}">
+                                {{ po.SellThroughPct }}%
+                            </span>
+                        </td>
+                        <td>${{ "%.2f" | format(po.TotalCost) }}</td>
+                        <td>${{ "%.2f" | format(po.TotalRevenue) }}</td>
+                        <td>
+                            <span class="badge {% if po.CostRecoveryPct >= 100 %}badge-high{% elif po.CostRecoveryPct >= 60 %}badge-medium{% else %}badge-low{% endif %}">
+                                {{ po.CostRecoveryPct }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <p>No purchase orders found.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('poSearch').addEventListener('input', function() {
+    var filter = this.value.toLowerCase();
+    document.querySelectorAll('#poTable tbody tr').forEach(function(row) {
+        row.style.display = row.textContent.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}
