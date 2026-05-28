@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% set active_page = 'purchase_orders' %}
+{% block title %}PO {{ po.OrderNumber }}{% endblock %}
+{% block page_title %}Purchase Order {{ po.OrderNumber }}{% endblock %}
+
+{% block content %}
+<div style="padding: 16px 32px 4px;">
+    <a href="/purchase-orders" style="color: var(--primary); text-decoration: none; font-size: 14px;">← All Purchase Orders</a>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ total_ordered }}</div>
+        <div class="stat-label">Units Ordered</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ total_sold }}</div>
+        <div class="stat-label">Units Sold</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">
+            <span class="badge {% if sell_thru_pct >= 75 %}badge-high{% elif sell_thru_pct >= 40 %}badge-medium{% else %}badge-low{% endif %}" style="font-size: 1.4rem; padding: 6px 14px;">
+                {{ sell_thru_pct }}%
+            </span>
+        </div>
+        <div class="stat-label">Sell-Through</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ avg_days if avg_days is not none else '—' }}{% if avg_days is not none %}<span style="font-size:1rem;font-weight:400;"> days</span>{% endif %}</div>
+        <div class="stat-label">Avg Days to Sell</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ "%.2f" | format(total_cost) }}</div>
+        <div class="stat-label">Total Cost</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">${{ "%.2f" | format(total_revenue) }}</div>
+        <div class="stat-label">Revenue</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">
+            <span class="badge {% if cost_recov_pct >= 100 %}badge-high{% elif cost_recov_pct >= 60 %}badge-medium{% else %}badge-low{% endif %}" style="font-size: 1.4rem; padding: 6px 14px;">
+                {{ cost_recov_pct }}%
+            </span>
+        </div>
+        <div class="stat-label">Cost Recovery</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ po.OrderDate[:10] if po.OrderDate else '—' }}</div>
+        <div class="stat-label">Order Date</div>
+    </div>
+</div>
+
+<div style="padding: 0 32px 32px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>Line Items — Sell-Through Detail</h3>
+            <input type="text" class="search-box" id="itemSearch" placeholder="Search products...">
+        </div>
+        <div class="card-body">
+            {% if items %}
+            <table class="data-table" id="itemTable">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>SKU</th>
+                        <th>Ordered</th>
+                        <th>Sold</th>
+                        <th>Sell-Through</th>
+                        <th>Cost</th>
+                        <th>Revenue</th>
+                        <th>Cost Recovery</th>
+                        <th>Avg Days to Sell</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr {% if item.UnitsSoldCapped >= item.UnitsOrdered %}class="po-has-qty"{% endif %}>
+                        <td>{{ item.InvProductName or item.POProductName }}</td>
+                        <td><span class="badge">{{ item.ProductSKU }}</span></td>
+                        <td>{{ item.UnitsOrdered }}</td>
+                        <td>{{ item.UnitsSoldCapped }}</td>
+                        <td>
+                            <span class="badge {% if item.SellThroughPct >= 75 %}badge-high{% elif item.SellThroughPct >= 40 %}badge-medium{% else %}badge-low{% endif %}">
+                                {{ item.SellThroughPct }}%
+                            </span>
+                        </td>
+                        <td>${{ "%.2f" | format(item.TotalCost) }}</td>
+                        <td>${{ "%.2f" | format(item.Revenue) }}</td>
+                        <td>
+                            <span class="badge {% if item.CostRecoveryPct >= 100 %}badge-high{% elif item.CostRecoveryPct >= 60 %}badge-medium{% else %}badge-low{% endif %}">
+                                {{ item.CostRecoveryPct }}%
+                            </span>
+                        </td>
+                        <td>{{ item.AvgDaysToSell if item.AvgDaysToSell is not none else '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight: 700; border-top: 2px solid var(--border);">
+                        <td>Total</td>
+                        <td></td>
+                        <td>{{ total_ordered }}</td>
+                        <td>{{ total_sold }}</td>
+                        <td>{{ sell_thru_pct }}%</td>
+                        <td>${{ "%.2f" | format(total_cost) }}</td>
+                        <td>${{ "%.2f" | format(total_revenue) }}</td>
+                        <td>{{ cost_recov_pct }}%</td>
+                        <td>{{ avg_days if avg_days is not none else '—' }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <p>No line items found for this purchase order.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('itemSearch').addEventListener('input', function() {
+    var filter = this.value.toLowerCase();
+    document.querySelectorAll('#itemTable tbody tr').forEach(function(row) {
+        row.style.display = row.textContent.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

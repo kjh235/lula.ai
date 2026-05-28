@@ -215,6 +215,136 @@ def purchase_order():
     )
 
 
+@app.route("/purchase-orders")
+def purchase_orders():
+    conn = get_conn()
+    # Subquery pre-filters to paid retail sales only, avoiding counting
+    # transfer/unpaid OrderItems that slip through a plain LEFT JOIN.
+    rows = conn.execute(
+        "SELECT "
+        "  po.OrderNumber, po.OrderDate, po.Total AS TotalCost, "
+        "  SUM(poi.Quantity) AS TotalUnitsOrdered, "
+        "  COUNT(rs.OrderItemID) AS TotalUnitsSold, "
+        "  COALESCE(SUM(rs.TotalPrice), 0) AS TotalRevenue "
+        "FROM PurchaseOrders po "
+        "LEFT JOIN PurchaseOrderItems poi ON poi.OrderNumber = po.OrderNumber "
+        "LEFT JOIN Products p ON p.ProductSKU = poi.ProductSKU "
+        "LEFT JOIN ("
+        "  SELECT oi.OrderItemID, oi.ProductName, oi.TotalPrice, o.PaidDate "
+        "  FROM OrderItems oi "
+        "  JOIN Orders o ON o.OrderNumber = oi.OrderNumber "
+        "  WHERE o.OrderType = 'RETAIL' AND o.PaidDate IS NOT NULL"
+        ") rs ON rs.ProductName = p.InvProductName AND rs.PaidDate >= po.OrderDate "
+        "GROUP BY po.OrderNumber, po.OrderDate, po.Total "
+        "ORDER BY po.OrderDate DESC"
+    ).fetchall()
+    conn.close()
+
+    po_list = []
+    for r in rows:
+        d = dict(r)
+        ordered = d['TotalUnitsOrdered'] or 0
+        sold = min(d['TotalUnitsSold'] or 0, ordered)
+        cost = float(d['TotalCost'] or 0)
+        revenue = float(d['TotalRevenue'] or 0)
+        d['SellThroughPct'] = round(sold / ordered * 100, 1) if ordered else 0
+        d['CostRecoveryPct'] = round(revenue / cost * 100, 1) if cost else 0
+        d['TotalUnitsSoldCapped'] = sold
+        d['TotalCost'] = cost
+        d['TotalRevenue'] = revenue
+        po_list.append(d)
+
+    total_pos = len(po_list)
+    total_ordered = sum(p['TotalUnitsOrdered'] or 0 for p in po_list)
+    total_sold = sum(p['TotalUnitsSoldCapped'] for p in po_list)
+    overall_sell_thru = round(total_sold / total_ordered * 100, 1) if total_ordered else 0
+    total_revenue = sum(p['TotalRevenue'] for p in po_list)
+
+    return render_template(
+        'purchase_orders.html',
+        po_list=po_list,
+        total_pos=total_pos,
+        total_ordered=total_ordered,
+        overall_sell_thru=overall_sell_thru,
+        total_revenue=total_revenue,
+    )
+
+
+@app.route("/purchase-orders/<order_number>")
+def purchase_order_detail(order_number):
+    conn = get_conn()
+
+    po = conn.execute(
+        "SELECT * FROM PurchaseOrders WHERE OrderNumber = ?", (order_number,)
+    ).fetchone()
+    if not po:
+        conn.close()
+        return "Purchase order not found", 404
+    po = dict(po)
+
+    items = [dict(r) for r in conn.execute(
+        "SELECT "
+        "  poi.ProductSKU, poi.ProductName AS POProductName, "
+        "  poi.Quantity AS UnitsOrdered, poi.CostPerUnit, poi.TotalCost, "
+        "  p.InvProductName, p.UnitPrice AS RetailPrice, "
+        "  COUNT(rs.OrderItemID) AS UnitsSold, "
+        "  COALESCE(SUM(rs.TotalPrice), 0) AS Revenue, "
+        "  CASE WHEN COUNT(rs.OrderItemID) > 0 "
+        "       THEN ROUND(AVG(JULIANDAY(rs.PaidDate) - JULIANDAY(po.OrderDate)), 1) "
+        "       ELSE NULL END AS AvgDaysToSell "
+        "FROM PurchaseOrderItems poi "
+        "JOIN PurchaseOrders po ON poi.OrderNumber = po.OrderNumber "
+        "LEFT JOIN Products p ON p.ProductSKU = poi.ProductSKU "
+        "LEFT JOIN ("
+        "  SELECT oi.OrderItemID, oi.ProductName, oi.TotalPrice, o.PaidDate "
+        "  FROM OrderItems oi "
+        "  JOIN Orders o ON o.OrderNumber = oi.OrderNumber "
+        "  WHERE o.OrderType = 'RETAIL' AND o.PaidDate IS NOT NULL"
+        ") rs ON rs.ProductName = p.InvProductName AND rs.PaidDate >= po.OrderDate "
+        "WHERE poi.OrderNumber = ? "
+        "GROUP BY poi.PurchaseItemID, poi.ProductSKU, poi.ProductName, "
+        "         poi.Quantity, poi.CostPerUnit, poi.TotalCost, "
+        "         p.InvProductName, p.UnitPrice "
+        "ORDER BY poi.ProductName",
+        (order_number,)
+    ).fetchall()]
+    conn.close()
+
+    for item in items:
+        units_ordered = item['UnitsOrdered'] or 1
+        units_sold = item['UnitsSold'] or 0
+        sold_capped = min(units_sold, units_ordered)
+        item['UnitsSoldCapped'] = sold_capped
+        item['SellThroughPct'] = round(sold_capped / units_ordered * 100, 1)
+        cost = float(item['TotalCost'] or 0)
+        revenue = float(item['Revenue'] or 0)
+        item['TotalCost'] = cost
+        item['Revenue'] = revenue
+        item['CostRecoveryPct'] = round(revenue / cost * 100, 1) if cost else 0
+
+    total_ordered = sum(i['UnitsOrdered'] or 0 for i in items)
+    total_sold = sum(i['UnitsSoldCapped'] for i in items)
+    total_cost = sum(i['TotalCost'] for i in items)
+    total_revenue = sum(i['Revenue'] for i in items)
+    sell_thru_pct = round(total_sold / total_ordered * 100, 1) if total_ordered else 0
+    cost_recov_pct = round(total_revenue / total_cost * 100, 1) if total_cost else 0
+    days_list = [i['AvgDaysToSell'] for i in items if i['AvgDaysToSell'] is not None]
+    avg_days = round(sum(days_list) / len(days_list), 1) if days_list else None
+
+    return render_template(
+        'purchase_order_detail.html',
+        po=po,
+        items=items,
+        total_ordered=total_ordered,
+        total_sold=total_sold,
+        sell_thru_pct=sell_thru_pct,
+        total_cost=total_cost,
+        total_revenue=total_revenue,
+        cost_recov_pct=cost_recov_pct,
+        avg_days=avg_days,
+    )
+
+
 @app.route("/api/customers/<customer_id>/recommendations")
 def api_recommendations(customer_id):
     n = request.args.get('n', 5, type=int)
