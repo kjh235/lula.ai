@@ -249,14 +249,22 @@ def insert_customer(dbconn, customerrec):
     UUID = binascii.b2a_hex(os.urandom(12))
     cursor = dbconn.cursor()
     try:
-        cursor.execute("INSERT INTO Customers VALUES (?, ?, ?, ?, null)",
-                       (UUID, customerrec[1], customerrec[0], customerrec[2])
-                       )
-        dbconn.commit()
+        row = cursor.execute(
+            "SELECT CustomerID FROM Customers WHERE CustomerEmail = ?",
+            (customerrec[1],)
+        ).fetchone()
+
+        if row is None:
+            cursor.execute("INSERT OR IGNORE INTO Customers VALUES (?, ?, ?, ?, null)",
+                           (UUID, customerrec[1], customerrec[0], customerrec[2])
+                           )
+            dbconn.commit()
+            logger.warning("adding customer ...")
         print("customer saved")
-    except:
-        print("customer failed to save")
-        pass
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+        print("Customer failed to save")
+        dbconn.rollback()
 
 
 def insert_product(dbconn, productrec):
@@ -264,14 +272,22 @@ def insert_product(dbconn, productrec):
     cursor = dbconn.cursor()
     cost = float(productrec[2].replace('$', ''))
     try:
-        cursor.execute("INSERT INTO Products VALUES (?, ?, ?, ?, ?, ?, ?, null, null, null, 0)",
-                   (UUID, productrec[0], productrec[1], productrec[4], productrec[3], cost, productrec[5])
-                   )
-        dbconn.commit()
+        row = cursor.execute(
+            "SELECT ProductID FROM Products WHERE ProductSKU = ?",
+            (productrec[0],)
+        ).fetchone()
+
+        if row is None:
+
+            cursor.execute("INSERT INTO Products VALUES (?, ?, ?, ?, ?, ?, ?, null, null, null)",
+                       (UUID, productrec[0], productrec[1], productrec[4], productrec[3], cost, productrec[5])
+                       )
+            dbconn.commit()
         print("product saved")
-    except:
-        print("product failed to save")
-        pass
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+        print("Product failed to save")
+        dbconn.rollback()
 
 
 def update_product(dbconn, translations_path=None):
@@ -291,9 +307,10 @@ def update_product(dbconn, translations_path=None):
             cursor.execute("UPDATE Products SET InvProductName=? WHERE ProductID =?", (InvProductName, ProductID))
             dbconn.commit()
             print("product saved")
-        except:
-            print("product failed to save")
-            pass
+        except sqlite3.Error as e:
+            print(f"An error occurred: {e}")
+            print("Product failed to save")
+            dbconn.rollback()
 
 
 def insert_purchase_order(dbconn, purchase_order_rec):
@@ -301,7 +318,10 @@ def insert_purchase_order(dbconn, purchase_order_rec):
     cursor = dbconn.cursor()
     OrderNumber = purchase_order_rec[0]
     OrderEmail = purchase_order_rec[1]
-    OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S %p")
+    try:
+        OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S %p")
+    except ValueError:
+        OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S")
     Subtotal = purchase_order_rec[3].lstrip("$").replace(',','')
     Shipping = purchase_order_rec[4].lstrip("$").replace(',','')
     Taxes = purchase_order_rec[5].lstrip("$").replace(',','')
@@ -309,16 +329,23 @@ def insert_purchase_order(dbconn, purchase_order_rec):
     Pieces = purchase_order_rec[7]
 
     try:
-        cursor.execute("INSERT INTO PurchaseOrders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                       (UUID, OrderNumber, OrderEmail, OrderDate,
-                        Subtotal, Shipping, Taxes,
-                        Total, Pieces)
-                       )
-        dbconn.commit()
+        row = cursor.execute(
+            "SELECT OrderID FROM PurchaseOrders WHERE OrderNumber = ?",
+            (OrderNumber,)
+        ).fetchone()
+
+        if row is None:
+            cursor.execute("INSERT INTO PurchaseOrders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (UUID, OrderNumber, OrderEmail, OrderDate,
+                            float(Subtotal), float(Shipping), float(Taxes),
+                            float(Total), float(Pieces))
+                           )
+            dbconn.commit()
         print("purchase order saved")
-    except:
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
         print("purchase order failed to save")
-        pass
+        dbconn.rollback()
 
 
 def insert_purchase_order_item(dbconn, purchasedItemsRec, purchaseOrderNumber):
@@ -338,9 +365,10 @@ def insert_purchase_order_item(dbconn, purchasedItemsRec, purchaseOrderNumber):
                    )
         dbconn.commit()
         print("PO item saved")
-    except:
-        print("PO item failed to save")
-        pass
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+        print("po item failed to save")
+        dbconn.rollback()
 
 
 def insert_retail_order(dbconn, retail_inv_rec, count_items):
@@ -350,7 +378,10 @@ def insert_retail_order(dbconn, retail_inv_rec, count_items):
     OrderPopup = retail_inv_rec[4]
     OrderEmail = retail_inv_rec[1]
     d_date = retail_inv_rec[2].replace(' PST','')
-    InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
+    try:
+        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
+    except ValueError:
+        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
     InvSubtotal = retail_inv_rec[5].lstrip("$").replace(',','')
     InvShipping = retail_inv_rec[7].lstrip("$").replace(',','')
     InvTaxes = retail_inv_rec[6].lstrip("$").replace(',','')
@@ -361,7 +392,7 @@ def insert_retail_order(dbconn, retail_inv_rec, count_items):
 
     try:
         cursor.execute("INSERT INTO RetailOrders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null,"
-                       "null, null, null, null, null, null, null, null, null, null, null, null)",
+                       "null, null, null, null, null, null, null, null, null, null, null, null, null, 0)",
                        (UUID, OrderNumber, OrderPopup, OrderEmail, InvDate,
                         InvSubtotal, InvTaxes, InvShipping, InvShippingTaxes,
                         InvDisc, InvTotal, InvPieces)
@@ -380,7 +411,10 @@ def insert_order(dbconn, retail_inv_rec, count_items):
     OrderPopup = retail_inv_rec[4]
     OrderEmail = retail_inv_rec[1]
     d_date = retail_inv_rec[2].replace(' PST', '')
-    InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
+    try:
+        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
+    except ValueError:
+        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
     InvSubtotal = retail_inv_rec[5].lstrip("$").replace(',', '')
     InvShipping = retail_inv_rec[7].lstrip("$").replace(',', '')
     InvTaxes = retail_inv_rec[6].lstrip("$").replace(',', '')
@@ -390,17 +424,24 @@ def insert_order(dbconn, retail_inv_rec, count_items):
     InvPieces = count_items
 
     try:
-        cursor.execute("INSERT INTO Orders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null,"
-                       "null, null, null, null, null, null, null, null, null, null, null, null, null)",
-                       (UUID, OrderNumber, OrderPopup, OrderEmail, InvDate,
-                        InvSubtotal, InvTaxes, InvShipping, InvShippingTaxes,
-                        InvDisc, InvTotal, InvPieces)
-                       )
-        dbconn.commit()
-        print("order saved")
-    except:
+        row = cursor.execute(
+            "SELECT OrderID FROM Orders WHERE OrderNumber = ?",
+            (OrderNumber,)
+        ).fetchone()
+
+        if row is None:
+            cursor.execute("INSERT INTO Orders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null,"
+                           "null, null, null, null, null, null, null, null, null, null, null, null, null)",
+                           (UUID, OrderNumber, OrderPopup, OrderEmail, InvDate,
+                            float(InvSubtotal), float(InvTaxes), float(InvShipping), float(InvShippingTaxes),
+                            float(InvDisc), float(InvTotal), float(InvPieces))
+                           )
+            dbconn.commit()
+            print("order saved")
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
         print("order failed to save")
-        pass
+        dbconn.rollback()
 
 
 def insert_paid_retail_order(conn, summary, numberOfItems, emailTime):
@@ -515,10 +556,14 @@ def insert_paid_transfer_order(conn, summary, numberOfItems, emailTime):
 
 def update_paid_order(conn, summary, numberOfItems, emailTime):
     UUID = binascii.b2a_hex(os.urandom(12))
-    cursor = conn.cursor()
 
+    cursor = conn.cursor()
     d_date = summary[2].replace(' PST', '')
     PaidDate = emailTime
+    try:
+        PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
+    except ValueError:
+        PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
     PaidSubtotal = summary[5].lstrip("$").replace(',', '')
     PaidShipping = summary[7].lstrip("$").replace(',', '')
     PaidTaxes = summary[6].lstrip("$").replace(',', '')
@@ -534,13 +579,13 @@ def update_paid_order(conn, summary, numberOfItems, emailTime):
 
     try:
         cursor.execute("UPDATE Orders SET PaidDate=? WHERE OrderNumber =?",(PaidDate, summary[3]))
-        cursor.execute("UPDATE Orders SET PaidSubtotal=? WHERE OrderNumber =?", (PaidSubtotal, summary[3]))
-        cursor.execute("UPDATE Orders SET PaidShipping=? WHERE OrderNumber =?", (PaidShipping, summary[3]))
-        cursor.execute("UPDATE Orders SET PaidTaxes=? WHERE OrderNumber =?", (PaidTaxes, summary[3]))
-        cursor.execute("UPDATE Orders SET PaidShippingTaxes=? WHERE OrderNumber =?", (PaidShipTaxes, summary[3]))
-        cursor.execute("UPDATE Orders SET PaidDiscount=? WHERE OrderNumber =?", (PaidDisc, summary[3]))
-        cursor.execute("UPDATE Orders SET PaidTotal=? WHERE OrderNumber =?", (PaidTotal, summary[3]))
-        cursor.execute("UPDATE Orders SET PaidPieces=? WHERE OrderNumber =?", (PaidPieces, summary[3]))
+        cursor.execute("UPDATE Orders SET PaidSubtotal=? WHERE OrderNumber =?", (float(PaidSubtotal), summary[3]))
+        cursor.execute("UPDATE Orders SET PaidShipping=? WHERE OrderNumber =?", (float(PaidShipping), summary[3]))
+        cursor.execute("UPDATE Orders SET PaidTaxes=? WHERE OrderNumber =?", (float(PaidTaxes), summary[3]))
+        cursor.execute("UPDATE Orders SET PaidShippingTaxes=? WHERE OrderNumber =?", (float(PaidShipTaxes), summary[3]))
+        cursor.execute("UPDATE Orders SET PaidDiscount=? WHERE OrderNumber =?", (float(PaidDisc), summary[3]))
+        cursor.execute("UPDATE Orders SET PaidTotal=? WHERE OrderNumber =?", (float(PaidTotal), summary[3]))
+        cursor.execute("UPDATE Orders SET PaidPieces=? WHERE OrderNumber =?", (float(PaidPieces), summary[3]))
         cursor.execute("UPDATE Orders SET ShipAddr1=? WHERE OrderNumber =?", (addr1, summary[3]))
         cursor.execute("UPDATE Orders SET ShipAddr2=? WHERE OrderNumber =?", (addr2, summary[3]))
         cursor.execute("UPDATE Orders SET City=? WHERE OrderNumber =?", (city, summary[3]))
@@ -548,9 +593,11 @@ def update_paid_order(conn, summary, numberOfItems, emailTime):
         cursor.execute("UPDATE Orders SET Zip=? WHERE OrderNumber =?", (zip, summary[3]))
         conn.commit()
         print("order saved")
-    except:
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
         print("order failed to save")
-        pass
+        conn.rollback()
+
 
 
 def update_transfer_type(conn, summary, my_email):
@@ -590,13 +637,14 @@ def insert_order_item(conn, items, orderNumber):
         itemTotal = float(itemPrice) - float(itemDisc)
         itemLine = items[0][2]
     try:
-        cursor.execute("INSERT INTO OrderItems VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       (UUID, orderNumber, itemLine, itemName, itemPrice, itemDisc, itemTotal))
+        cursor.execute("INSERT OR IGNORE INTO OrderItems VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       (UUID, orderNumber, itemLine, itemName, float(itemPrice), float(itemDisc), float(itemTotal)))
         conn.commit()
         print("order item saved")
-    except:
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
         print("order item failed to save")
-        pass
+        conn.rollback()
 
 
 def update_task_start_time(conn, task, time):
@@ -605,9 +653,12 @@ def update_task_start_time(conn, task, time):
         cursor.execute("UPDATE Task SET lastStartTime=? WHERE taskName =?", (time, task))
         conn.commit()
         return
-    except:
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
         print("task failed to save")
-        pass
+        conn.rollback()
+
+
 
 
 def update_task_end_time(conn, task, time):
@@ -616,9 +667,11 @@ def update_task_end_time(conn, task, time):
         cursor.execute("UPDATE Task SET lastEndTime=? WHERE taskName =?", (time, task))
         conn.commit()
         return
-    except:
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
         print("task failed to save")
-        pass
+        conn.rollback()
+
 
 
 def init_task(conn, task):
@@ -629,9 +682,11 @@ def init_task(conn, task):
                     (UUID, task))
         conn.commit()
         return
-    except:
-        print("task exist")
-        pass
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+        print("task failed to save")
+        conn.rollback()
+
 
 
 def record_inventory_event(conn, product_name, delta, event_type, order_number, event_date):
@@ -656,13 +711,18 @@ def record_inventory_event(conn, product_name, delta, event_type, order_number, 
     """
     UUID = binascii.b2a_hex(os.urandom(12))
     cursor = conn.cursor()
-    cursor.execute(
-        "INSERT OR IGNORE INTO InventoryLedger "
-        "(LedgerID, ProductName, Delta, EventType, OrderNumber, EventDate) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (UUID, product_name, delta, event_type, order_number, event_date),
-    )
-    conn.commit()
+    try:
+        cursor.execute(
+            "INSERT OR IGNORE INTO InventoryLedger "
+            "(LedgerID, ProductName, Delta, EventType, OrderNumber, EventDate) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (UUID, product_name, delta, event_type, order_number, event_date),
+        )
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+        print("inventory event failed to save")
+        conn.rollback()
     inserted = cursor.rowcount > 0
     if inserted:
         logger.info(
@@ -697,11 +757,15 @@ def apply_order_to_inventory(conn, order_number):
              has an unrecognised type, was not found, or all rows already exist).
     """
     cursor = conn.cursor()
-
-    row = cursor.execute(
-        "SELECT OrderType, PaidDate FROM Orders WHERE OrderNumber = ?",
-        (order_number,)
-    ).fetchone()
+    try:
+        row = cursor.execute(
+            "SELECT OrderType, PaidDate FROM Orders WHERE OrderNumber = ?",
+            (order_number,)
+        ).fetchone()
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+        print("inventory failed to save")
+        conn.rollback()
 
     if row is None:
         logger.warning("apply_order_to_inventory: order %s not found", order_number)
