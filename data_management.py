@@ -176,6 +176,10 @@ def init_db(db_path="app/bless.db"):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ledger_product ON InventoryLedger(ProductName)")
     except sqlite3.OperationalError:
         pass
+    try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_invname ON Products(InvProductName)")
+    except sqlite3.OperationalError:
+        pass
 
     try:
         cursor.execute("ALTER TABLE Products ADD COLUMN SizeNormalized TEXT")

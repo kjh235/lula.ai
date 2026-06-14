@@ -215,27 +215,43 @@ def purchase_order():
     )
 
 
+_MATCHED_SALES_CTE = """
+    matched_sales AS (
+        SELECT oi.OrderItemID, oi.TotalPrice, o.PaidDate,
+            COALESCE(
+                (SELECT p1.ProductSKU FROM Products p1
+                 WHERE p1.InvProductName = oi.ProductName LIMIT 1),
+                (SELECT p2.ProductSKU FROM Products p2
+                 WHERE oi.ProductName LIKE ('% ' || p2.ProductStyle || ' ' || p2.ProductSize)
+                    OR oi.ProductName = (p2.ProductStyle || ' ' || p2.ProductSize)
+                 LIMIT 1)
+            ) AS ProductSKU
+        FROM OrderItems oi
+        JOIN Orders o ON o.OrderNumber = oi.OrderNumber
+        WHERE o.OrderType = 'RETAIL' AND o.PaidDate IS NOT NULL
+    )
+"""
+
+
 @app.route("/purchase-orders")
 def purchase_orders():
     conn = get_conn()
-    # Subquery pre-filters to paid retail sales only, avoiding counting
-    # transfer/unpaid OrderItems that slip through a plain LEFT JOIN.
     rows = conn.execute(
+        "WITH " + _MATCHED_SALES_CTE +
         "SELECT "
         "  po.OrderNumber, po.OrderDate, po.Total AS TotalCost, "
-        "  SUM(poi.Quantity) AS TotalUnitsOrdered, "
-        "  COUNT(rs.OrderItemID) AS TotalUnitsSold, "
-        "  COALESCE(SUM(rs.TotalPrice), 0) AS TotalRevenue "
+        "  pos.TotalUnitsOrdered, "
+        "  COUNT(ms.OrderItemID) AS TotalUnitsSold, "
+        "  COALESCE(SUM(ms.TotalPrice), 0) AS TotalRevenue "
         "FROM PurchaseOrders po "
-        "LEFT JOIN PurchaseOrderItems poi ON poi.OrderNumber = po.OrderNumber "
-        "LEFT JOIN Products p ON p.ProductSKU = poi.ProductSKU "
         "LEFT JOIN ("
-        "  SELECT oi.OrderItemID, oi.ProductName, oi.TotalPrice, o.PaidDate "
-        "  FROM OrderItems oi "
-        "  JOIN Orders o ON o.OrderNumber = oi.OrderNumber "
-        "  WHERE o.OrderType = 'RETAIL' AND o.PaidDate IS NOT NULL"
-        ") rs ON rs.ProductName = p.InvProductName AND rs.PaidDate >= po.OrderDate "
-        "GROUP BY po.OrderNumber, po.OrderDate, po.Total "
+        "  SELECT OrderNumber, SUM(Quantity) AS TotalUnitsOrdered "
+        "  FROM PurchaseOrderItems GROUP BY OrderNumber"
+        ") pos ON pos.OrderNumber = po.OrderNumber "
+        "LEFT JOIN PurchaseOrderItems poi ON poi.OrderNumber = po.OrderNumber "
+        "LEFT JOIN matched_sales ms ON ms.ProductSKU = poi.ProductSKU "
+        "  AND ms.PaidDate >= po.OrderDate "
+        "GROUP BY po.OrderNumber, po.OrderDate, po.Total, pos.TotalUnitsOrdered "
         "ORDER BY po.OrderDate DESC"
     ).fetchall()
     conn.close()
@@ -283,24 +299,21 @@ def purchase_order_detail(order_number):
     po = dict(po)
 
     items = [dict(r) for r in conn.execute(
+        "WITH " + _MATCHED_SALES_CTE +
         "SELECT "
         "  poi.ProductSKU, poi.ProductName AS POProductName, "
         "  poi.Quantity AS UnitsOrdered, poi.CostPerUnit, poi.TotalCost, "
         "  p.InvProductName, p.UnitPrice AS RetailPrice, "
-        "  COUNT(rs.OrderItemID) AS UnitsSold, "
-        "  COALESCE(SUM(rs.TotalPrice), 0) AS Revenue, "
-        "  CASE WHEN COUNT(rs.OrderItemID) > 0 "
-        "       THEN ROUND(AVG(JULIANDAY(rs.PaidDate) - JULIANDAY(po.OrderDate)), 1) "
+        "  COUNT(ms.OrderItemID) AS UnitsSold, "
+        "  COALESCE(SUM(ms.TotalPrice), 0) AS Revenue, "
+        "  CASE WHEN COUNT(ms.OrderItemID) > 0 "
+        "       THEN ROUND(AVG(JULIANDAY(ms.PaidDate) - JULIANDAY(po.OrderDate)), 1) "
         "       ELSE NULL END AS AvgDaysToSell "
         "FROM PurchaseOrderItems poi "
         "JOIN PurchaseOrders po ON poi.OrderNumber = po.OrderNumber "
         "LEFT JOIN Products p ON p.ProductSKU = poi.ProductSKU "
-        "LEFT JOIN ("
-        "  SELECT oi.OrderItemID, oi.ProductName, oi.TotalPrice, o.PaidDate "
-        "  FROM OrderItems oi "
-        "  JOIN Orders o ON o.OrderNumber = oi.OrderNumber "
-        "  WHERE o.OrderType = 'RETAIL' AND o.PaidDate IS NOT NULL"
-        ") rs ON rs.ProductName = p.InvProductName AND rs.PaidDate >= po.OrderDate "
+        "LEFT JOIN matched_sales ms ON ms.ProductSKU = poi.ProductSKU "
+        "  AND ms.PaidDate >= po.OrderDate "
         "WHERE poi.OrderNumber = ? "
         "GROUP BY poi.PurchaseItemID, poi.ProductSKU, poi.ProductName, "
         "         poi.Quantity, poi.CostPerUnit, poi.TotalCost, "
