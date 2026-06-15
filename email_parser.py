@@ -1,5 +1,8 @@
-from bs4 import BeautifulSoup
+import json
+import os
 import re
+
+from bs4 import BeautifulSoup
 
 
 def remove_patterns(input_text, patterns_to_remove):
@@ -28,35 +31,13 @@ def get_to_email(input_email_txt):
         if (re.search(to_email_address_pattern, rows)):
             to_email = re.search(to_email_address_pattern, rows).group(1)
             return to_email
+def _load_translations():
+    json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'product_name_translations.json')
+    with open(json_path) as f:
+        return json.load(f)
+
 def translate_productName_to_invoiceName(sku_list):
-    translations = {
-        "HW23":"Witchful Thinking Halloween",
-        "CZY23" :"Cozy",
-        "CZY20": "Cozy",
-        "Flare Jean":"Denim Flared",
-        #"Single Solid" : "Solid",
-        "OTD23" : "Great Outdoors 2023",
-        "Single Print Leggings":"Single Pack Leggings - Prints",
-        "RSRT22":"Resort 2022",
-        "RSRT23 ": "",
-        "CRER23":"Career Career",
-        "CRER22": "Career 2022",
-        "4J23":"Americana 2023",
-        "4J22": "Americana 2022",
-        "DREAM22 ":"",
-        "DREAM21 ": "",
-        "High Rise Slim Straight":"",
-        "SP22 ":"",
-        "VL22 ":"",
-        "HW22":"Halloween 2022",
-        "HW21": "Halloween 2021",
-        "BOHO22 ":"",
-        "LUXE21 ":"",
-        "DNM21 ":"",
-        "DR21 ": "",
-        "BCA21":"BCA 2021",
-        "ATR23":"Animal"
-        }
+    translations = _load_translations()
     new_sku_list = []
     for i in sku_list:
         sku = i
