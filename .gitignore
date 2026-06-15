@@ -167,3 +167,4 @@ app/ml/artifacts/*.pkl
 /credentials.json
 /token.json
 /stripe.json
+*.db

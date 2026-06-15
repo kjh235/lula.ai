@@ -13,6 +13,10 @@ DRESS_NUMERIC_LADDER = {
     str(n): i for i, n in enumerate(range(0, 30, 2))
 }
 
+DENIM_NUMERIC_LADDER = {
+    str(n): i for i, n in enumerate(range(24, 48, 2))
+}
+
 KIDS_LADDER = {
     '2': 0, '4': 1, '6': 2, '8': 3, '10': 4, '12': 5, '14': 6,
     'S': 0, 'M': 1, 'L': 2,
@@ -23,6 +27,7 @@ FAMILY_LADDERS = {
     'leggings': LEGGINGS_LADDER,
     'dress_numeric': DRESS_NUMERIC_LADDER,
     'kids': KIDS_LADDER,
+    'denim': DENIM_NUMERIC_LADDER,
 }
 
 KIDS_STYLES = {
@@ -50,6 +55,9 @@ def classify_family(product_style, size_token):
     for kid_style in KIDS_STYLES:
         if kid_style in style_lower:
             return 'kids'
+
+    if re.match(r'denim', style_lower):
+        return 'denim'
 
     if re.match(r'^\d+$', size_norm) and size_norm not in CLOTHING_LADDER:
         return 'dress_numeric'
