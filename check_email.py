@@ -9,21 +9,23 @@ import time
 
 data_management.init_db()
 
-def purchaseOrders(creds, search_query):
-    # Call the Gmail API
+
+def _fetch_gmail_messages(creds, search_query):
     service = build('gmail', 'v1', credentials=creds)
-    # request a list of all the messages
     result = service.users().messages().list(maxResults=500, userId='me', q=search_query).execute()
     messages = result.get('messages')
-    # messages is a list of dictionaries where each dictionary contains a message id.
-    # iterate through all the messages
     for msg in messages:
-        # Get the message from its id
         print(msg['id'])
         txt = service.users().messages().get(userId='me', id=msg['id'], format='raw').execute()
-        data = txt['raw']
-        data = data.replace("-", "+").replace("_", "/")
+        data = txt['raw'].replace("-", "+").replace("_", "/")
         decoded_data = base64.b64decode(data)
+        email_epoch = int(txt['internalDate'][:-3])
+        email_time = datetime.fromtimestamp(email_epoch, tz=None)
+        yield msg['id'], decoded_data, email_time, service
+
+
+def purchaseOrders(creds, search_query):
+    for msg_id, decoded_data, _, _ in _fetch_gmail_messages(creds, search_query):
         with sqlite3.connect("app/bless.db") as conn:
             sku_list, summary, POitems = email_parser.get_order_summary(decoded_data)
             try:
@@ -34,23 +36,11 @@ def purchaseOrders(creds, search_query):
                     data_management.insert_purchase_order_item(conn, items, summary[0])
                 data_management.apply_purchase_order_to_inventory(conn, summary[0])
             except Exception:
-                print(msg['id'])
+                print(msg_id)
+
 
 def retailInvoices(creds, search_query):
-    # Call the Gmail API
-    service = build('gmail', 'v1', credentials=creds)
-    # request a list of all the messages
-    result = service.users().messages().list(maxResults=500, userId='me', q=search_query).execute()
-    messages = result.get('messages')
-    # messages is a list of dictionaries where each dictionary contains a message id.
-    # iterate through all the messages
-    for msg in messages:
-        # Get the message from its id
-        print(msg['id'])
-        txt = service.users().messages().get(userId='me', id=msg['id'], format='raw').execute()
-        data = txt['raw']
-        data = data.replace("-", "+").replace("_", "/")
-        decoded_data = base64.b64decode(data)
+    for msg_id, decoded_data, _, _ in _fetch_gmail_messages(creds, search_query):
         with sqlite3.connect("app/bless.db") as conn:
             try:
                 customer, summary, orderItems = email_parser.get_order_summary(decoded_data)
@@ -59,29 +49,11 @@ def retailInvoices(creds, search_query):
                 data_management.insert_order(conn, summary, numberOfItems)
                 data_management.update_order_type(conn, summary[3], "RETAIL")
             except Exception:
-                print(msg['id'])
+                print(msg_id)
+
 
 def retailPaid(creds, search_query):
-    # Call the Gmail API
-    service = build('gmail', 'v1', credentials=creds)
-    # request a list of all the messages
-    result = service.users().messages().list(maxResults=500, userId='me', q=search_query).execute()
-    messages = result.get('messages')
-    # messages is a list of dictionaries where each dictionary contains a message id.
-    # iterate through all the messages
-    for msg in messages:
-        # Get the message from its id
-        print(msg['id'])
-
-        txt = service.users().messages().get(userId='me', id=msg['id'], format='raw').execute()
-        data = txt['raw']
-        email_epoch_ms = txt['internalDate']
-        email_epoch_s = email_epoch_ms[:-3]
-        email_epoch = int(email_epoch_s)
-        email_time = datetime.fromtimestamp(email_epoch, tz=None)
-        data = data.replace("-", "+").replace("_", "/")
-        decoded_data = base64.b64decode(data)
-        # Use try-except to avoid any Errors
+    for msg_id, decoded_data, email_time, _ in _fetch_gmail_messages(creds, search_query):
         with sqlite3.connect("app/bless.db") as conn:
             summary, orderItems = email_parser.get_order_summary(decoded_data)
             numberOfItems = len(orderItems)
@@ -90,31 +62,14 @@ def retailPaid(creds, search_query):
                 for items in (orderItems,) if type(orderItems[0]) is not list else orderItems:
                     data_management.insert_order_item(conn, items, summary[3])
                 data_management.apply_order_to_inventory(conn, summary[3])
-
             except Exception:
-                print(msg['id'])
+                print(msg_id)
+
 
 def transferInvoices(creds, search_query):
-    # Call the Gmail API
     service = build('gmail', 'v1', credentials=creds)
-    # request a list of all the messages
-    result = service.users().messages().list(maxResults=500, userId='me', q=search_query).execute()
-    messages = result.get('messages')
-    my_profile = service.users().getProfile(userId='me').execute()
-    my_email = my_profile['emailAddress']
-    # messages is a list of dictionaries where each dictionary contains a message id.
-    # iterate through all the messages
-    for msg in messages:
-        # Get the message from its id
-        print(msg['id'])
-        txt = service.users().messages().get(userId='me', id=msg['id'], format='raw').execute()
-        data = txt['raw']
-        email_epoch_ms = txt['internalDate']
-        email_epoch_s = email_epoch_ms[:-3]
-        email_epoch = int(email_epoch_s)
-        email_time = datetime.fromtimestamp(email_epoch, tz=None)
-        data = data.replace("-", "+").replace("_", "/")
-        decoded_data = base64.b64decode(data)
+    my_email = service.users().getProfile(userId='me').execute()['emailAddress']
+    for msg_id, decoded_data, _, _ in _fetch_gmail_messages(creds, search_query):
         with sqlite3.connect("app/bless.db") as conn:
             try:
                 customer, summary, orderItems = email_parser.get_order_summary(decoded_data)
@@ -126,31 +81,13 @@ def transferInvoices(creds, search_query):
                 else:
                     data_management.update_order_type(conn, summary[3], "TRANSFER_OUT")
             except Exception:
-                print(msg['id'])
+                print(msg_id)
 
 
 def transferPaid(creds, search_query):
-    # Call the Gmail API
     service = build('gmail', 'v1', credentials=creds)
-    # request a list of all the messages
-    result = service.users().messages().list(maxResults=500, userId='me', q=search_query).execute()
-    messages = result.get('messages')
-    my_profile = service.users().getProfile(userId='me').execute()
-    my_email = my_profile['emailAddress']
-    # messages is a list of dictionaries where each dictionary contains a message id.
-    # iterate through all the messages
-    for msg in messages:
-        # Get the message from its id
-        print(msg['id'])
-
-        txt = service.users().messages().get(userId='me', id=msg['id'], format='raw').execute()
-        data = txt['raw']
-        email_epoch_ms = txt['internalDate']
-        email_epoch_s = email_epoch_ms[:-3]
-        email_epoch = int(email_epoch_s)
-        email_time = datetime.fromtimestamp(email_epoch, tz=None)
-        data = data.replace("-", "+").replace("_", "/")
-        decoded_data = base64.b64decode(data)
+    my_email = service.users().getProfile(userId='me').execute()['emailAddress']
+    for msg_id, decoded_data, email_time, _ in _fetch_gmail_messages(creds, search_query):
         with sqlite3.connect("app/bless.db") as conn:
             try:
                 summary, orderItems = email_parser.get_order_summary(decoded_data)
@@ -160,10 +97,7 @@ def transferPaid(creds, search_query):
                     data_management.insert_order_item(conn, items, summary[3])
                 data_management.apply_order_to_inventory(conn, summary[3])
             except Exception:
-                print(msg['id'])
-
-
-
+                print(msg_id)
 
 
 search_query_retail_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Order Number" after:2026/04/01'
@@ -172,7 +106,6 @@ search_query_purchase = 'from:noreply@lularoe.com subject: "LuLaRoe Wholesale Or
 search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Purchase Receipt from LuLaRoe - Order Number" after:2026/05/01'
 search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2026/04/01'
 
-#get latest run time
 with sqlite3.connect("app/bless.db", timeout=10) as conn:
     data_management.init_task(conn,"CHECK_EMAILS")
     data_management.update_task_start_time(conn,"CHECK_EMAILS", time.time())
@@ -185,5 +118,3 @@ with sqlite3.connect("app/bless.db", timeout=10) as conn:
     #transferPaid(creds,search_query_transfer_paid)
 with sqlite3.connect("app/bless.db", timeout=10) as conn:
     data_management.update_task_end_time(conn,"CHECK_EMAILS", time.time())
-#update latest run time
-
