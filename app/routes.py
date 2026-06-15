@@ -142,7 +142,7 @@ def inventory():
     conn = get_conn()
     raw = conn.execute(
         "SELECT p.ProductSKU, p.ProductName, p.ProductStyle, p.ProductSize, "
-        "p.UnitPrice, p.SizingFamily, p.SizeNormalized, "
+        "p.UnitPrice, p.SizingFamily, p.SizeNormalized, p.ProductFamily, "
         "COALESCE(SUM(l.Delta), 0) AS Quantity "
         "FROM Products p "
         "LEFT JOIN InventoryLedger l ON l.ProductName = p.ProductName "
