@@ -35,9 +35,9 @@ def purchaseOrders(creds, search_query):
                 data_management.insert_purchase_order_item(conn, items, summary[0])
             #data_management.update_product(conn)
             data_management.apply_purchase_order_to_inventory(conn, summary[0])
-        except:
+        except Exception:
             print(msg['id'])
-            pass
+
 def retailInvoices(creds, search_query):
     # Call the Gmail API
     service = build('gmail', 'v1', credentials=creds)
@@ -63,9 +63,9 @@ def retailInvoices(creds, search_query):
             data_management.insert_order(conn, summary, numberOfItems)
             data_management.update_order_type(conn, summary[3], "RETAIL")
 
-        except:
+        except Exception:
             print(msg['id'])
-            pass
+
 def retailPaid(creds, search_query):
     # Call the Gmail API
     service = build('gmail', 'v1', credentials=creds)
@@ -96,9 +96,8 @@ def retailPaid(creds, search_query):
                     data_management.insert_order_item(conn, items, summary[3])
                 data_management.apply_order_to_inventory(conn, summary[3])
 
-            except:
+            except Exception:
                 print(msg['id'])
-                pass
 
 def transferInvoices(creds, search_query):
     # Call the Gmail API
@@ -132,9 +131,8 @@ def transferInvoices(creds, search_query):
                 data_management.update_order_type(conn, summary[3], "TRANSFER_IN")
             else:
                 data_management.update_order_type(conn, summary[3], "TRANSFER_OUT")
-        except:
+        except Exception:
             print(msg['id'])
-            pass
 
 
 def transferPaid(creds, search_query):
@@ -169,9 +167,8 @@ def transferPaid(creds, search_query):
             for items in (orderItems,) if type(orderItems[0]) is not list else orderItems:
                 data_management.insert_order_item(conn, items, summary[3])
             data_management.apply_order_to_inventory(conn, summary[3])
-        except:
+        except Exception:
             print(msg['id'])
-            pass
 
 
 

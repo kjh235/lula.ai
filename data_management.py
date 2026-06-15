@@ -424,9 +424,8 @@ def insert_retail_order(dbconn, retail_inv_rec, count_items):
                        )
         dbconn.commit()
         print("order saved")
-    except:
+    except Exception:
         print("order failed to save")
-        pass
 
 
 def insert_order(dbconn, retail_inv_rec, count_items):
@@ -504,9 +503,8 @@ def insert_paid_retail_order(conn, summary, numberOfItems, emailTime):
         cursor.execute("UPDATE RetailOrders SET Zip=? WHERE OrderNumber =?", (zip, summary[3]))
         conn.commit()
         print("order saved")
-    except:
+    except Exception:
         print("order failed to save")
-        pass
 
 
 def insert_transfer_order(dbconn, retail_inv_rec, count_items):
@@ -534,9 +532,8 @@ def insert_transfer_order(dbconn, retail_inv_rec, count_items):
                        )
         dbconn.commit()
         print("order saved")
-    except:
+    except Exception:
         print("order failed to save")
-        pass
 
 
 def insert_paid_transfer_order(conn, summary, numberOfItems, emailTime):
@@ -574,9 +571,8 @@ def insert_paid_transfer_order(conn, summary, numberOfItems, emailTime):
         cursor.execute("UPDATE TransferOrders SET Zip=? WHERE OrderNumber =?", (zip, summary[3]))
         conn.commit()
         print("order saved")
-    except:
+    except Exception:
         print("order failed to save")
-        pass
 
 
 def update_paid_order(conn, summary, numberOfItems, emailTime):
@@ -641,9 +637,8 @@ def update_order_type(conn, orderNumber, type):
     try:
         cursor.execute("UPDATE Orders SET OrderType=? WHERE OrderNumber =?", (type, orderNumber))
         conn.commit()
-    except:
+    except Exception:
         print("order item failed to save")
-        pass
 
 
 def insert_order_item(conn, items, orderNumber):

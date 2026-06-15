@@ -151,7 +151,7 @@ def get_order_summary(x):
             print(order_summary)
             print(order_items)
             return order_summary, order_items
-    except:
+    except Exception:
         print("err")
 
 
