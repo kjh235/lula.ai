@@ -1,7 +1,5 @@
-from email.message import EmailMessage
 from bs4 import BeautifulSoup
 import re
-import numpy as np
 
 
 def remove_patterns(input_text, patterns_to_remove):
@@ -12,14 +10,6 @@ def remove_patterns(input_text, patterns_to_remove):
 patterns_to_remove = [r'\=20',r'\=09',r'\=E2',r'\=80',r'\=94',r'\=3D09',r'\=3D99',r'\=3DE2',r'\=3D80',r'\=3D20',r'\=3D',r'\=',r'\\n',r'\\r',r'\\t',r'\'\'',r'\'',r'\"',r'\<[^>]*>',r'\?utf-8\?Q\?']
 
 invoice_link = r'<a href="(.*?)"(.*?)\s+Pay Invoice'
-
-
-customer_invoice = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\My LuLaRoe Order Number 101665959.eml'
-purchase_order = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\LuLaRoe Wholesale Order Confirmation.eml'
-customer_paid_invoice = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\Purchase Receipt from LuLaRoe - Order Number 101677472.eml'
-transfer_invoice = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\My LuLaRoe Transfer Order Number 101671946.eml'
-transfer_paid_invoice_out = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\Transfer Receipt from LuLaRoe - Order Number 101671946.eml'
-transfer_paid_invoice_in = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\Transfer Receipt from LuLaRoe - Order Number 101674649.eml'
 
 
 def message_parse(x, patterns_to_remove):
@@ -497,32 +487,3 @@ def purchase_order_parse(k, recipient_email):
                      k[TAXES_INDEX + 1], k[TOTAL_INDEX + 1], qty_sum]
     sku_list = translate_productName_to_invoiceName(sku_list)
     return order_summary, order_items, sku_list
-
-
-
-customer_invoice = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\My LuLaRoe Order Number 101665959.eml'
-purchase_order = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\LuLaRoe Wholesale Order Confirmation.eml'
-customer_paid_invoice = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\Purchase Receipt from LuLaRoe - Order Number 101677472.eml'
-transfer_invoice = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\My LuLaRoe Transfer Order Number 101671946.eml'
-transfer_paid_invoice_out = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\Transfer Receipt from LuLaRoe - Order Number 101671946.eml'
-transfer_paid_invoice_in = 'C:\\Users\kjh23\OneDrive\Documents\Python Scripts\Transfer Receipt from LuLaRoe - Order Number 101674649.eml'
-
-
-def email_test(file_to_parse):
-    with open(file_to_parse) as fp:
-        # Create a text/plain message
-        msg = EmailMessage()
-        msg.set_content(fp.read())
-        x = msg.get_payload()
-        summary = get_order_summary(x)
-
-        return summary
-
-
-# email_test(customer_invoice)
-# data_management.insert_customer(email_test(customer_invoice))
-# email_test(customer_paid_invoice)
-# email_test(purchase_order)
-# email_test(transfer_invoice)
-# email_test(transfer_paid_invoice_out)
-# email_test(transfer_paid_invoice_in)
