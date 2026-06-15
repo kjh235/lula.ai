@@ -24,19 +24,17 @@ def purchaseOrders(creds, search_query):
         data = txt['raw']
         data = data.replace("-", "+").replace("_", "/")
         decoded_data = base64.b64decode(data)
-        conn = sqlite3.connect("app/bless.db")
-        sku_list, summary, POitems = email_parser.get_order_summary(decoded_data)
-        # Use try-except to avoid any Errors
-        try:
-            for rows in (sku_list,) if type(sku_list[0]) is not list else sku_list:
-                data_management.insert_product(conn, rows)
-            data_management.insert_purchase_order(conn, summary)
-            for items in (POitems[1:],) if type(POitems[0]) is not list else POitems[1:]:
-                data_management.insert_purchase_order_item(conn, items, summary[0])
-            #data_management.update_product(conn)
-            data_management.apply_purchase_order_to_inventory(conn, summary[0])
-        except Exception:
-            print(msg['id'])
+        with sqlite3.connect("app/bless.db") as conn:
+            sku_list, summary, POitems = email_parser.get_order_summary(decoded_data)
+            try:
+                for rows in (sku_list,) if type(sku_list[0]) is not list else sku_list:
+                    data_management.insert_product(conn, rows)
+                data_management.insert_purchase_order(conn, summary)
+                for items in (POitems[1:],) if type(POitems[0]) is not list else POitems[1:]:
+                    data_management.insert_purchase_order_item(conn, items, summary[0])
+                data_management.apply_purchase_order_to_inventory(conn, summary[0])
+            except Exception:
+                print(msg['id'])
 
 def retailInvoices(creds, search_query):
     # Call the Gmail API
@@ -53,18 +51,15 @@ def retailInvoices(creds, search_query):
         data = txt['raw']
         data = data.replace("-", "+").replace("_", "/")
         decoded_data = base64.b64decode(data)
-        # Use try-except to avoid any Errors
-        try:
-            conn = sqlite3.connect("app/bless.db")
-            customer, summary, orderItems = email_parser.get_order_summary(decoded_data)
-
-            data_management.insert_customer(conn, customer)
-            numberOfItems = len(orderItems)
-            data_management.insert_order(conn, summary, numberOfItems)
-            data_management.update_order_type(conn, summary[3], "RETAIL")
-
-        except Exception:
-            print(msg['id'])
+        with sqlite3.connect("app/bless.db") as conn:
+            try:
+                customer, summary, orderItems = email_parser.get_order_summary(decoded_data)
+                data_management.insert_customer(conn, customer)
+                numberOfItems = len(orderItems)
+                data_management.insert_order(conn, summary, numberOfItems)
+                data_management.update_order_type(conn, summary[3], "RETAIL")
+            except Exception:
+                print(msg['id'])
 
 def retailPaid(creds, search_query):
     # Call the Gmail API
@@ -120,19 +115,18 @@ def transferInvoices(creds, search_query):
         email_time = datetime.fromtimestamp(email_epoch, tz=None)
         data = data.replace("-", "+").replace("_", "/")
         decoded_data = base64.b64decode(data)
-        # Use try-except to avoid any Errors
-        try:
-            conn = sqlite3.connect("app/bless.db")
-            customer, summary, orderItems = email_parser.get_order_summary(decoded_data)
-            data_management.insert_customer(conn, customer)
-            numberOfItems = len(orderItems)
-            data_management.insert_order(conn, summary, numberOfItems)
-            if summary[1] == my_email:
-                data_management.update_order_type(conn, summary[3], "TRANSFER_IN")
-            else:
-                data_management.update_order_type(conn, summary[3], "TRANSFER_OUT")
-        except Exception:
-            print(msg['id'])
+        with sqlite3.connect("app/bless.db") as conn:
+            try:
+                customer, summary, orderItems = email_parser.get_order_summary(decoded_data)
+                data_management.insert_customer(conn, customer)
+                numberOfItems = len(orderItems)
+                data_management.insert_order(conn, summary, numberOfItems)
+                if summary[1] == my_email:
+                    data_management.update_order_type(conn, summary[3], "TRANSFER_IN")
+                else:
+                    data_management.update_order_type(conn, summary[3], "TRANSFER_OUT")
+            except Exception:
+                print(msg['id'])
 
 
 def transferPaid(creds, search_query):
@@ -157,18 +151,16 @@ def transferPaid(creds, search_query):
         email_time = datetime.fromtimestamp(email_epoch, tz=None)
         data = data.replace("-", "+").replace("_", "/")
         decoded_data = base64.b64decode(data)
-        # Use try-except to avoid any Errors
-        try:
-            conn = sqlite3.connect("app/bless.db")
-            summary, orderItems = email_parser.get_order_summary(decoded_data)
-
-            numberOfItems = len(orderItems)
-            data_management.update_paid_order(conn, summary, numberOfItems, email_time)
-            for items in (orderItems,) if type(orderItems[0]) is not list else orderItems:
-                data_management.insert_order_item(conn, items, summary[3])
-            data_management.apply_order_to_inventory(conn, summary[3])
-        except Exception:
-            print(msg['id'])
+        with sqlite3.connect("app/bless.db") as conn:
+            try:
+                summary, orderItems = email_parser.get_order_summary(decoded_data)
+                numberOfItems = len(orderItems)
+                data_management.update_paid_order(conn, summary, numberOfItems, email_time)
+                for items in (orderItems,) if type(orderItems[0]) is not list else orderItems:
+                    data_management.insert_order_item(conn, items, summary[3])
+                data_management.apply_order_to_inventory(conn, summary[3])
+            except Exception:
+                print(msg['id'])
 
 
 
