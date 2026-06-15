@@ -95,6 +95,7 @@ def transferPaid(creds, search_query):
                 data_management.update_paid_order(conn, summary, numberOfItems, email_time)
                 for items in (orderItems,) if type(orderItems[0]) is not list else orderItems:
                     data_management.insert_order_item(conn, items, summary[3])
+                data_management.upsert_products_from_transfer_in(conn, summary[3])
                 data_management.apply_order_to_inventory(conn, summary[3])
             except Exception:
                 print(msg_id)
