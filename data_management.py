@@ -1004,3 +1004,175 @@ def apply_all_purchase_orders_to_inventory(conn):
         len(rows), total,
     )
     return total
+
+
+# ---------------------------------------------------------------------------
+# TRANSFER_IN product catalog upsert
+# ---------------------------------------------------------------------------
+
+_KNOWN_SIZES = {
+    '2XS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL',
+    'OS', 'O/S', 'TC', 'TC2', 'T/C', 'T/C2',
+    '1X', '2X', '3X',
+    'K2', 'K4', 'K6', 'K8', 'K10', 'K12',
+    'S/M',
+}
+
+
+def upsert_transfer_in_product(conn, product_name, unit_price=None):
+    """Find or create a Product entry for an item from a TRANSFER_IN order.
+
+    Match priority:
+    1. Exact ``Products.InvProductName`` match  → return existing SKU
+    2. Exact ``Products.ProductName`` match      → return existing SKU
+    3. No match → create a stub Product with a generated placeholder SKU
+
+    The stub uses ``TIN-<hex>`` as the ProductSKU to satisfy the ``UNIQUE NOT NULL``
+    constraint. ``ProductStyle`` and ``ProductSize`` are parsed from the last
+    space-separated token when it looks like a size code; otherwise the full
+    name is used as the style and ``OS`` as the size.
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+        product_name (str): ``OrderItems.ProductName`` from the transfer order
+        unit_price (float | None): price from the order item, used for ``UnitPrice``
+            on new stub rows (defaults to 0.0 if not provided)
+
+    Returns:
+        str | None: ``ProductSKU`` of the matched or newly created Product,
+            or ``None`` if *product_name* is falsy or a DB error occurred.
+    """
+    if not product_name:
+        return None
+
+    cursor = conn.cursor()
+
+    # 1. Exact InvProductName match
+    row = cursor.execute(
+        "SELECT ProductSKU FROM Products WHERE InvProductName = ? LIMIT 1",
+        (product_name,),
+    ).fetchone()
+    if row:
+        return row[0]
+
+    # 2. Exact ProductName match
+    row = cursor.execute(
+        "SELECT ProductSKU FROM Products WHERE ProductName = ? LIMIT 1",
+        (product_name,),
+    ).fetchone()
+    if row:
+        return row[0]
+
+    # 3. No match — create stub
+    parts = product_name.rsplit(' ', 1)
+    if len(parts) == 2 and parts[1].upper() in {s.upper() for s in _KNOWN_SIZES}:
+        style, size = parts[0], parts[1]
+    else:
+        style, size = product_name, 'OS'
+
+    prod_id = binascii.b2a_hex(os.urandom(12)).decode()
+    sku_placeholder = 'TIN-' + binascii.b2a_hex(os.urandom(6)).decode()
+    price = float(unit_price) if unit_price is not None else 0.0
+
+    try:
+        cursor.execute(
+            "INSERT INTO Products "
+            "(ProductID, ProductSKU, ProductName, ProductSize, ProductStyle, "
+            "UnitPrice, InvProductName) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (prod_id, sku_placeholder, product_name, size, style, price, product_name),
+        )
+        conn.commit()
+        logger.info(
+            "upsert_transfer_in_product: created stub '%s' (SKU=%s, style='%s', size='%s')",
+            product_name, sku_placeholder, style, size,
+        )
+        return sku_placeholder
+    except sqlite3.IntegrityError:
+        logger.warning(
+            "upsert_transfer_in_product: IntegrityError creating stub for '%s'",
+            product_name,
+        )
+        return None
+
+
+def upsert_products_from_transfer_in(conn, order_number):
+    """Ensure all items from a TRANSFER_IN paid order exist in the Products catalog.
+
+    Iterates over distinct ``OrderItems.ProductName`` values for the order and
+    calls :func:`upsert_transfer_in_product` for each.  Only operates on
+    ``TRANSFER_IN`` orders; returns 0 immediately for any other type.
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+        order_number (str): ``Orders.OrderNumber`` to process
+
+    Returns:
+        int: number of new Product stub rows created.
+    """
+    cursor = conn.cursor()
+
+    row = cursor.execute(
+        "SELECT OrderType FROM Orders WHERE OrderNumber = ?",
+        (order_number,),
+    ).fetchone()
+    if not row or row[0] != 'TRANSFER_IN':
+        return 0
+
+    items = cursor.execute(
+        "SELECT DISTINCT ProductName, UnitPrice FROM OrderItems WHERE OrderNumber = ?",
+        (order_number,),
+    ).fetchall()
+
+    before = conn.execute("SELECT COUNT(*) FROM Products").fetchone()[0]
+    for product_name, unit_price in items:
+        if product_name:
+            upsert_transfer_in_product(conn, product_name, unit_price)
+    after = conn.execute("SELECT COUNT(*) FROM Products").fetchone()[0]
+
+    created = after - before
+    logger.info(
+        "upsert_products_from_transfer_in: order %s — %d new product stub(s) created",
+        order_number, created,
+    )
+    return created
+
+
+def backfill_products_from_all_transfer_ins(conn):
+    """Create stub Products for all TRANSFER_IN items not already in the catalog.
+
+    Iterates over all paid ``TRANSFER_IN`` orders and calls
+    :func:`upsert_transfer_in_product` for each distinct item.  Safe to
+    re-run — existing products are found by name and skipped.
+
+    Args:
+        conn: open sqlite3 connection to bless.db
+
+    Returns:
+        int: total new Product stub rows created.
+    """
+    rows = conn.execute(
+        "SELECT OrderNumber FROM Orders "
+        "WHERE OrderType = 'TRANSFER_IN' AND PaidDate IS NOT NULL"
+    ).fetchall()
+
+    before = conn.execute("SELECT COUNT(*) FROM Products").fetchone()[0]
+
+    for (order_number,) in rows:
+        items = conn.execute(
+            "SELECT DISTINCT ProductName, UnitPrice FROM OrderItems WHERE OrderNumber = ?",
+            (order_number,),
+        ).fetchall()
+        for product_name, unit_price in items:
+            if product_name:
+                upsert_transfer_in_product(conn, product_name, unit_price)
+
+    after = conn.execute("SELECT COUNT(*) FROM Products").fetchone()[0]
+    total_created = after - before
+
+    logger.info(
+        "backfill_products_from_all_transfer_ins: %d order(s) processed, "
+        "%d new product stub(s) created",
+        len(rows), total_created,
+    )
+    return total_created
