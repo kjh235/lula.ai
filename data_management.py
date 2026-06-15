@@ -396,39 +396,6 @@ def insert_purchase_order_item(dbconn, purchasedItemsRec, purchaseOrderNumber):
         dbconn.rollback()
 
 
-def insert_retail_order(dbconn, retail_inv_rec, count_items):
-    UUID = binascii.b2a_hex(os.urandom(12))
-    cursor = dbconn.cursor()
-    OrderNumber = retail_inv_rec[3]
-    OrderPopup = retail_inv_rec[4]
-    OrderEmail = retail_inv_rec[1]
-    d_date = retail_inv_rec[2].replace(' PST','')
-    try:
-        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
-    except ValueError:
-        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
-    InvSubtotal = retail_inv_rec[5].lstrip("$").replace(',','')
-    InvShipping = retail_inv_rec[7].lstrip("$").replace(',','')
-    InvTaxes = retail_inv_rec[6].lstrip("$").replace(',','')
-    InvShippingTaxes = retail_inv_rec[8].lstrip("$").replace(',','')
-    InvDisc = 0
-    InvTotal = retail_inv_rec[9].lstrip("$").replace(',','')
-    InvPieces = count_items
-
-    try:
-        cursor.execute("INSERT INTO RetailOrders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null,"
-                       "null, null, null, null, null, null, null, null, null, null, null, null, null, 0)",
-                       (UUID, OrderNumber, OrderPopup, OrderEmail, InvDate,
-                        InvSubtotal, InvTaxes, InvShipping, InvShippingTaxes,
-                        InvDisc, InvTotal, InvPieces)
-                       )
-        dbconn.commit()
-        print("order saved")
-    except:
-        print("order failed to save")
-        pass
-
-
 def insert_order(dbconn, retail_inv_rec, count_items):
     UUID = binascii.b2a_hex(os.urandom(12))
     cursor = dbconn.cursor()
@@ -469,116 +436,6 @@ def insert_order(dbconn, retail_inv_rec, count_items):
         dbconn.rollback()
 
 
-def insert_paid_retail_order(conn, summary, numberOfItems, emailTime):
-    UUID = binascii.b2a_hex(os.urandom(12))
-    cursor = conn.cursor()
-
-    d_date = summary[2].replace(' PST', '')
-    PaidDate = emailTime
-    PaidSubtotal = summary[5].lstrip("$").replace(',', '')
-    PaidShipping = summary[7].lstrip("$").replace(',', '')
-    PaidTaxes = summary[6].lstrip("$").replace(',', '')
-    PaidShipTaxes = summary[8].lstrip("$").replace(',', '')
-    PaidDisc = 0
-    PaidTotal = summary[9].lstrip("$").replace(',', '')
-    PaidPieces = numberOfItems
-    addr1 = summary[10]
-    addr2 = summary[11]
-    city = summary[12]
-    state = summary[13]
-    zip = summary[14]
-
-    try:
-        cursor.execute("UPDATE RetailOrders SET PaidDate=? WHERE OrderNumber =?",(PaidDate, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET PaidSubtotal=? WHERE OrderNumber =?", (PaidSubtotal, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET PaidShipping=? WHERE OrderNumber =?", (PaidShipping, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET PaidTaxes=? WHERE OrderNumber =?", (PaidTaxes, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET PaidShippingTaxes=? WHERE OrderNumber =?", (PaidShipTaxes, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET PaidDiscount=? WHERE OrderNumber =?", (PaidDisc, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET PaidTotal=? WHERE OrderNumber =?", (PaidTotal, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET PaidPieces=? WHERE OrderNumber =?", (PaidPieces, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET ShipAddr1=? WHERE OrderNumber =?", (addr1, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET ShipAddr2=? WHERE OrderNumber =?", (addr2, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET City=? WHERE OrderNumber =?", (city, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET State=? WHERE OrderNumber =?", (state, summary[3]))
-        cursor.execute("UPDATE RetailOrders SET Zip=? WHERE OrderNumber =?", (zip, summary[3]))
-        conn.commit()
-        print("order saved")
-    except:
-        print("order failed to save")
-        pass
-
-
-def insert_transfer_order(dbconn, retail_inv_rec, count_items):
-    UUID = binascii.b2a_hex(os.urandom(12))
-    cursor = dbconn.cursor()
-    OrderNumber = retail_inv_rec[3]
-    OrderPopup = retail_inv_rec[4]
-    OrderEmail = retail_inv_rec[1]
-    d_date = retail_inv_rec[2].replace(' PST','')
-    InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
-    InvSubtotal = retail_inv_rec[5].lstrip("$").replace(',','')
-    InvShipping = retail_inv_rec[6].lstrip("$").replace(',','')
-    InvTaxes = 0
-    InvShippingTaxes = retail_inv_rec[7].lstrip("$").replace(',','')
-    InvDisc = 0
-    InvTotal = retail_inv_rec[8].lstrip("$").replace(',','')
-    InvPieces = count_items
-
-    try:
-        cursor.execute("INSERT INTO TransferOrders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null,"
-                       "null, null, null, null, null, null, null, null, null, null, null, null, null)",
-                       (UUID, OrderNumber, OrderPopup, OrderEmail, InvDate,
-                        InvSubtotal, InvTaxes, InvShipping, InvShippingTaxes,
-                        InvDisc, InvTotal, InvPieces)
-                       )
-        dbconn.commit()
-        print("order saved")
-    except:
-        print("order failed to save")
-        pass
-
-
-def insert_paid_transfer_order(conn, summary, numberOfItems, emailTime):
-    UUID = binascii.b2a_hex(os.urandom(12))
-    cursor = conn.cursor()
-
-    d_date = summary[2].replace(' PST', '')
-    PaidDate = emailTime
-    PaidSubtotal = summary[5].lstrip("$").replace(',', '')
-    PaidShipping = summary[7].lstrip("$").replace(',', '')
-    PaidTaxes = summary[6].lstrip("$").replace(',', '')
-    PaidShipTaxes = summary[8].lstrip("$").replace(',', '')
-    PaidDisc = 0
-    PaidTotal = summary[9].lstrip("$").replace(',', '')
-    PaidPieces = numberOfItems
-    addr1 = summary[10]
-    addr2 = summary[11]
-    city = summary[12]
-    state = summary[13]
-    zip = summary[14]
-
-    try:
-        cursor.execute("UPDATE TransferOrders SET PaidDate=? WHERE OrderNumber =?",(PaidDate, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET PaidSubtotal=? WHERE OrderNumber =?", (PaidSubtotal, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET PaidShipping=? WHERE OrderNumber =?", (PaidShipping, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET PaidTaxes=? WHERE OrderNumber =?", (PaidTaxes, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET PaidShippingTaxes=? WHERE OrderNumber =?", (PaidShipTaxes, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET PaidDiscount=? WHERE OrderNumber =?", (PaidDisc, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET PaidTotal=? WHERE OrderNumber =?", (PaidTotal, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET PaidPieces=? WHERE OrderNumber =?", (PaidPieces, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET ShipAddr1=? WHERE OrderNumber =?", (addr1, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET ShipAddr2=? WHERE OrderNumber =?", (addr2, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET City=? WHERE OrderNumber =?", (city, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET State=? WHERE OrderNumber =?", (state, summary[3]))
-        cursor.execute("UPDATE TransferOrders SET Zip=? WHERE OrderNumber =?", (zip, summary[3]))
-        conn.commit()
-        print("order saved")
-    except:
-        print("order failed to save")
-        pass
-
-
 def update_paid_order(conn, summary, numberOfItems, emailTime):
     UUID = binascii.b2a_hex(os.urandom(12))
 
@@ -603,19 +460,16 @@ def update_paid_order(conn, summary, numberOfItems, emailTime):
     zip = summary[14]
 
     try:
-        cursor.execute("UPDATE Orders SET PaidDate=? WHERE OrderNumber =?",(PaidDate, summary[3]))
-        cursor.execute("UPDATE Orders SET PaidSubtotal=? WHERE OrderNumber =?", (float(PaidSubtotal), summary[3]))
-        cursor.execute("UPDATE Orders SET PaidShipping=? WHERE OrderNumber =?", (float(PaidShipping), summary[3]))
-        cursor.execute("UPDATE Orders SET PaidTaxes=? WHERE OrderNumber =?", (float(PaidTaxes), summary[3]))
-        cursor.execute("UPDATE Orders SET PaidShippingTaxes=? WHERE OrderNumber =?", (float(PaidShipTaxes), summary[3]))
-        cursor.execute("UPDATE Orders SET PaidDiscount=? WHERE OrderNumber =?", (float(PaidDisc), summary[3]))
-        cursor.execute("UPDATE Orders SET PaidTotal=? WHERE OrderNumber =?", (float(PaidTotal), summary[3]))
-        cursor.execute("UPDATE Orders SET PaidPieces=? WHERE OrderNumber =?", (float(PaidPieces), summary[3]))
-        cursor.execute("UPDATE Orders SET ShipAddr1=? WHERE OrderNumber =?", (addr1, summary[3]))
-        cursor.execute("UPDATE Orders SET ShipAddr2=? WHERE OrderNumber =?", (addr2, summary[3]))
-        cursor.execute("UPDATE Orders SET City=? WHERE OrderNumber =?", (city, summary[3]))
-        cursor.execute("UPDATE Orders SET State=? WHERE OrderNumber =?", (state, summary[3]))
-        cursor.execute("UPDATE Orders SET Zip=? WHERE OrderNumber =?", (zip, summary[3]))
+        cursor.execute(
+            """UPDATE Orders SET PaidDate=?, PaidSubtotal=?, PaidShipping=?,
+               PaidTaxes=?, PaidShippingTaxes=?, PaidDiscount=?, PaidTotal=?,
+               PaidPieces=?, ShipAddr1=?, ShipAddr2=?, City=?, State=?, Zip=?
+               WHERE OrderNumber=?""",
+            (PaidDate, float(PaidSubtotal), float(PaidShipping),
+             float(PaidTaxes), float(PaidShipTaxes), float(PaidDisc),
+             float(PaidTotal), float(PaidPieces), addr1, addr2,
+             city, state, zip, summary[3])
+        )
         conn.commit()
         print("order saved")
     except sqlite3.Error as e:
@@ -641,9 +495,8 @@ def update_order_type(conn, orderNumber, type):
     try:
         cursor.execute("UPDATE Orders SET OrderType=? WHERE OrderNumber =?", (type, orderNumber))
         conn.commit()
-    except:
+    except Exception:
         print("order item failed to save")
-        pass
 
 
 def insert_order_item(conn, items, orderNumber):
