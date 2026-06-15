@@ -144,284 +144,120 @@ def get_index(text_to_find, k):
         return 999
 
 
-def transfer_invoice_parse(k, recipient_email):
-    CUSTOMER_NAME = "Customer"
-    CUSTOMER_NAME_INDEX = k.index(CUSTOMER_NAME)
-    DATE = "Date:"
-    DATE_INDEX = k.index(DATE)
-    ORDER_NUM = "Order #:"
-    ORDER_NUM_INDEX = k.index(ORDER_NUM)
-    POPUP_NUM = "Pop-Up #:"
-    POPUP_NUM_INDEX = k.index(POPUP_NUM)
-    ORDER_TOTAL = "Order Total:"
-    ORDER_TOTAL_INDEX = k.index(ORDER_TOTAL)
-    ORDER_SUMMARY = "Order Summary"
-    ORDER_SUMMARY_INDEX = k.index(ORDER_SUMMARY)
-    ITEMS_SUBTOTAL = "Items Subtotal"
-    ITEMS_SUBTOTAL_INDEX = get_index(ITEMS_SUBTOTAL, k)
-    ORDER_DISCOUNT = "Order Discount"
-    ORDER_DISCOUNT_INDEX = get_index(ORDER_DISCOUNT, k)
-    SUBTOTAL = "Subtotal"
-    SUBTOTAL_INDEX = k.index(SUBTOTAL)
-    TAXES = "Tax"
-    TAXES_INDEX = get_index(TAXES, k)
-    SandH = "S&H"
-    SandH_INDEX = k.index(SandH)
-    SandH_Tax = "S&H Tax"
-    SandH_Tax_INDEX = k.index(SandH_Tax)
-    TOTAL = "Total"
-    TOTAL_INDEX = k.index(TOTAL)
-    if ORDER_DISCOUNT_INDEX == 999:
-        SECTION_INDEX = SUBTOTAL_INDEX
-    else:
-        SECTION_INDEX = min(ITEMS_SUBTOTAL_INDEX, ORDER_DISCOUNT_INDEX)
-    NUM_OF_SKUS = int((SECTION_INDEX - ORDER_SUMMARY_INDEX) / 2)
+def _lookup_field_indices(k):
+    return {
+        'CUSTOMER_NAME': get_index("Customer", k),
+        'BILL_TO': get_index("Bill To:", k),
+        'SHIP_TO': get_index("Ship To:", k),
+        'DATE': get_index("Date:", k),
+        'ORDER_NUM': get_index("Order #:", k),
+        'POPUP_NUM': get_index("Pop-Up #:", k),
+        'ORDER_TOTAL': get_index("Order Total:", k),
+        'ORDER_SUMMARY': get_index("Order Summary", k),
+        'ITEMS_SUBTOTAL': get_index("Items Subtotal", k),
+        'ORDER_DISCOUNT': get_index("Order Discount", k),
+        'SUBTOTAL': get_index("Subtotal", k),
+        'TAXES': get_index("Tax", k),
+        'SandH': get_index("S&H", k),
+        'SandH_Tax': get_index("S&H Tax", k),
+        'TOTAL': get_index("Total", k),
+    }
+
+
+def _extract_order_items(k, order_summary_index, section_index, cols=2):
+    num_skus = int((section_index - order_summary_index) / cols)
     order_items = []
-    ORDER_ITEM_COL = 2
-    j = 0
-    while j < (NUM_OF_SKUS):
-        i = 0
+    for j in range(num_skus):
         items = []
-        while i < (ORDER_ITEM_COL):
-            m = int(ORDER_SUMMARY_INDEX + 1 + (i + (j * ORDER_ITEM_COL)))
+        for i in range(cols):
+            m = int(order_summary_index + 1 + (i + (j * cols)))
             items.append(k[m])
-            i += 1
         items.append(j + 1)
         order_items.append(items)
-        j += 1
-    if TAXES_INDEX == 999:
-        tax = '$0.00'
-    else:
-        tax = k[TAXES_INDEX + 1]
-    order_summary = []
-    summary_header = ["customer", "email", "date", "order number", "popup number", "subtotal", "shipping",
-                      "Shipping Tax", "total"]
-    order_summary = [k[CUSTOMER_NAME_INDEX + 1], recipient_email, k[DATE_INDEX + 1],
-                     k[ORDER_NUM_INDEX + 1], k[POPUP_NUM_INDEX + 1],
-                     k[SUBTOTAL_INDEX + 1], tax, k[SandH_INDEX + 1],
-                     k[SandH_Tax_INDEX + 1], k[TOTAL_INDEX + 1]
-                     ]
-    customer = [k[CUSTOMER_NAME_INDEX + 1], recipient_email, "TRANSFER"]
-    return customer, order_summary, order_items
+    return order_items
 
 
-def retail_invoice_parse(k, recipient_email):
-    CUSTOMER_NAME = "Customer"
-    CUSTOMER_NAME_INDEX = get_index(CUSTOMER_NAME, k)
-    DATE = "Date:"
-    DATE_INDEX = get_index(DATE, k)
-    ORDER_NUM = "Order #:"
-    ORDER_NUM_INDEX = get_index(ORDER_NUM, k)
-    POPUP_NUM = "Pop-Up #:"
-    POPUP_NUM_INDEX = get_index(POPUP_NUM, k)
-    ORDER_TOTAL = "Order Total:"
-    ORDER_TOTAL_INDEX = get_index(ORDER_TOTAL, k)
-    ORDER_SUMMARY = "Order Summary"
-    ORDER_SUMMARY_INDEX = get_index(ORDER_SUMMARY, k)
-    ITEMS_SUBTOTAL = "Items Subtotal"
-    ITEMS_SUBTOTAL_INDEX = get_index(ITEMS_SUBTOTAL, k)
-    ORDER_DISCOUNT = "Order Discount"
-    ORDER_DISCOUNT_INDEX = get_index(ORDER_DISCOUNT, k)
-    SUBTOTAL = "Subtotal"
-    SUBTOTAL_INDEX = get_index(SUBTOTAL, k)
-    TAXES = "Tax"
-    TAXES_INDEX = get_index(TAXES, k)
-    SandH = "S&H"
-    SandH_INDEX = get_index(SandH, k)
-    SandH_Tax = "S&H Tax"
-    SandH_Tax_INDEX = get_index(SandH_Tax, k)
-    TOTAL = "Total"
-    TOTAL_INDEX = get_index(TOTAL, k)
-    if ORDER_DISCOUNT_INDEX == 999 :
-        SECTION_INDEX = SUBTOTAL_INDEX
-    else:
-        SECTION_INDEX = min(ITEMS_SUBTOTAL_INDEX,ORDER_DISCOUNT_INDEX)
-    NUM_OF_SKUS = int((SECTION_INDEX - ORDER_SUMMARY_INDEX) / 2)
-    order_items = []
-    ORDER_ITEM_COL = 2
-    j = 0
-    while j < (NUM_OF_SKUS):
-        i = 0
-        items = []
-        while i < (ORDER_ITEM_COL):
-            m = int(ORDER_SUMMARY_INDEX + 1 + (i + (j * ORDER_ITEM_COL)))
-            items.append(k[m])
-            i += 1
-        items.append(j + 1)
-        order_items.append(items)
-        j += 1
-    if TAXES_INDEX == 999:
-        tax = '$0.00'
-    else:
-        tax = k[TAXES_INDEX + 1]
-    summary_header = ["customer", "email", "date", "order number", "popup number", "subtotal", "shipping",
-                      "Tax", "Shipping Tax", "total"]
-    order_summary = [k[CUSTOMER_NAME_INDEX + 1], recipient_email, k[DATE_INDEX + 1],
-                     k[ORDER_NUM_INDEX + 1], k[POPUP_NUM_INDEX + 1],
-                     k[SUBTOTAL_INDEX + 1], tax, k[SandH_INDEX + 1],
-                     k[SandH_Tax_INDEX + 1], k[TOTAL_INDEX + 1]
-                     ]
-    customer = [k[CUSTOMER_NAME_INDEX + 1], recipient_email, "RETAIL"]
-    return customer, order_summary, order_items
+def _compute_section_index(idx, use_discount_fallback=False):
+    discount = idx['ORDER_DISCOUNT']
+    items_subtotal = idx['ITEMS_SUBTOTAL']
+    subtotal = idx['SUBTOTAL']
+    if use_discount_fallback:
+        if discount == 999:
+            if items_subtotal == 999:
+                return subtotal
+            return items_subtotal
+        return min(items_subtotal, discount)
+    if discount == 999:
+        return subtotal
+    return min(items_subtotal, discount)
 
 
-def retail_paid_parse(k, recipient_email):
-    BILL_TO = "Bill To:"
-    BILL_TO_INDEX = get_index(BILL_TO, k)
-    SHIP_TO = "Ship To:"
-    SHIP_TO_INDEX = get_index(SHIP_TO, k)
-    DATE = "Date:"
-    DATE_INDEX = get_index(DATE, k)
-    ORDER_NUM = "Order #:"
-    ORDER_NUM_INDEX = get_index(ORDER_NUM, k)
-    POPUP_NUM = "Pop-Up #:"
-    POPUP_NUM_INDEX = get_index(POPUP_NUM, k)
-    ORDER_TOTAL = "Order Total:"
-    ORDER_TOTAL_INDEX = get_index(ORDER_TOTAL, k)
-    ORDER_SUMMARY = "Order Summary"
-    ORDER_SUMMARY_INDEX = get_index(ORDER_SUMMARY, k)
-    ITEMS_SUBTOTAL = "Items Subtotal"
-    ITEMS_SUBTOTAL_INDEX = get_index(ITEMS_SUBTOTAL, k)
-    DISCOUNT = "Order Discount"
-    DISCOUNT_INDEX = get_index(DISCOUNT, k)
-    SUBTOTAL = "Subtotal"
-    SUBTOTAL_INDEX = get_index(SUBTOTAL, k)
-    TAXES = "Tax"
-    TAXES_INDEX = get_index(TAXES, k)
-    SandH = "S&H"
-    SandH_INDEX = get_index(SandH, k)
-    SandH_Tax = "S&H Tax"
-    SandH_Tax_INDEX = get_index(SandH_Tax, k)
-    TOTAL = "Total"
-    TOTAL_INDEX = get_index(TOTAL, k)
+def _get_tax(k, taxes_index):
+    return '$0.00' if taxes_index == 999 else k[taxes_index + 1]
 
-    if DISCOUNT_INDEX == 999:
-        if ITEMS_SUBTOTAL_INDEX == 999:
-            SECTION_INDEX = SUBTOTAL_INDEX
-        else:
-            SECTION_INDEX = ITEMS_SUBTOTAL_INDEX
-    else:
-        SECTION_INDEX = min(ITEMS_SUBTOTAL_INDEX, DISCOUNT_INDEX)
-    NUM_OF_SKUS = int((SECTION_INDEX - ORDER_SUMMARY_INDEX) / 2)
-    order_items = []
-    ORDER_ITEM_COL = 2
-    j = 0
-    while j < (NUM_OF_SKUS):
-        i = 0
-        items = []
-        while i < (ORDER_ITEM_COL):
-            m = int(ORDER_SUMMARY_INDEX + 1 + (i + (j * ORDER_ITEM_COL)))
-            items.append(k[m])
-            i += 1
-        items.append(j + 1)
-        order_items.append(items)
-        j += 1
-    addr_lines = DATE_INDEX - SHIP_TO_INDEX - 3
-    addr1 = k[SHIP_TO_INDEX + 2]
+
+def _parse_shipping_address_retail(k, idx):
+    addr_lines = idx['DATE'] - idx['SHIP_TO'] - 3
+    addr1 = k[idx['SHIP_TO'] + 2]
     addr2 = ""
     if addr_lines > 1:
-        addr2 = k[SHIP_TO_INDEX + 3]
-    city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[DATE_INDEX - 1])
-    city = city_state_zip.group(1)
-    state = city_state_zip.group(2)
-    zip = city_state_zip.group(3)
-    summary_header = ["customer", "email", "date", "order number", "popup number", "subtotal", "shipping",
-                       "Tax", "Shipping Tax", "total"
-        , "ship addr1", "ship addr2", "ship city", "ship state", "ship zip"]
-    if TAXES_INDEX == 999:
-        tax = '$0.00'
-    else:
-        tax = k[TAXES_INDEX + 1]
-    order_summary = [k[BILL_TO_INDEX + 1], recipient_email, k[DATE_INDEX + 1],
-                     k[ORDER_NUM_INDEX + 1], k[POPUP_NUM_INDEX + 1],
-                     k[SUBTOTAL_INDEX + 1], tax, k[SandH_INDEX + 1],
-                     k[SandH_Tax_INDEX + 1], k[TOTAL_INDEX + 1],
-                     addr1, addr2, city, state, zip
-                     ]
-    order_items = extract_discount(order_items)
-    return order_summary, order_items
-def transfer_paid_parse(k, recipient_email):
-    BILL_TO = "Bill To:"
-    BILL_TO_INDEX = get_index(BILL_TO, k)
-    SHIP_TO = "Ship To:"
-    SHIP_TO_INDEX = get_index(SHIP_TO, k)
-    DATE = "Date:"
-    DATE_INDEX = get_index(DATE, k)
-    ORDER_NUM = "Order #:"
-    ORDER_NUM_INDEX = get_index(ORDER_NUM, k)
-    POPUP_NUM = "Pop-Up #:"
-    POPUP_NUM_INDEX = get_index(POPUP_NUM, k)
-    ORDER_TOTAL = "Order Total:"
-    ORDER_TOTAL_INDEX = get_index(ORDER_TOTAL, k)
-    ORDER_SUMMARY = "Order Summary"
-    ORDER_SUMMARY_INDEX = get_index(ORDER_SUMMARY, k)
-    ITEMS_SUBTOTAL = "Items Subtotal"
-    ITEMS_SUBTOTAL_INDEX = get_index(ITEMS_SUBTOTAL, k)
-    DISCOUNT = "Order Discount"
-    DISCOUNT_INDEX = get_index(DISCOUNT, k)
-    SUBTOTAL = "Subtotal"
-    SUBTOTAL_INDEX = get_index(SUBTOTAL, k)
-    TAXES = "Tax"
-    TAXES_INDEX = get_index(TAXES, k)
-    SandH = "S&H"
-    SandH_INDEX = get_index(SandH, k)
-    SandH_Tax = "S&H Tax"
-    SandH_Tax_INDEX = get_index(SandH_Tax, k)
-    TOTAL = "Total"
-    TOTAL_INDEX = get_index(TOTAL, k)
+        addr2 = k[idx['SHIP_TO'] + 3]
+    city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[idx['DATE'] - 1])
+    return addr1, addr2, city_state_zip.group(1), city_state_zip.group(2), city_state_zip.group(3)
 
-    if DISCOUNT_INDEX == 999:
-        if ITEMS_SUBTOTAL_INDEX == 999:
-            SECTION_INDEX = SUBTOTAL_INDEX
-        else:
-            SECTION_INDEX = ITEMS_SUBTOTAL_INDEX
-    else:
-        SECTION_INDEX = min(ITEMS_SUBTOTAL_INDEX, DISCOUNT_INDEX)
-    NUM_OF_SKUS = int((SECTION_INDEX - ORDER_SUMMARY_INDEX) / 2)
-    order_items = []
-    ORDER_ITEM_COL = 2
-    j = 0
-    while j < (NUM_OF_SKUS):
-        i = 0
-        items = []
-        while i < (ORDER_ITEM_COL):
-            m = int(ORDER_SUMMARY_INDEX + 1 + (i + (j * ORDER_ITEM_COL)))
-            items.append(k[m])
-            i += 1
-        items.append(j+1)
-        order_items.append(items)
-        j += 1
-    addr_lines = DATE_INDEX - SHIP_TO_INDEX - 3
+
+def _parse_shipping_address_transfer(k, idx):
+    addr_lines = idx['DATE'] - idx['SHIP_TO'] - 3
     if addr_lines == 0:
-        addr1 = k[SHIP_TO_INDEX + 1]
+        addr1 = k[idx['SHIP_TO'] + 1]
         addr2 = ""
-        city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[SHIP_TO_INDEX + 2])
-    if addr_lines == 1:
-        addr1 = k[SHIP_TO_INDEX + 2]
+        city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[idx['SHIP_TO'] + 2])
+    elif addr_lines == 1:
+        addr1 = k[idx['SHIP_TO'] + 2]
         addr2 = ""
-        city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[SHIP_TO_INDEX + 3])
-    if addr_lines > 1:
-        addr1 = k[SHIP_TO_INDEX + 2]
-        addr2 = k[SHIP_TO_INDEX + 3]
-        city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[DATE_INDEX - 1])
-    city = city_state_zip.group(1)
-    state = city_state_zip.group(2)
-    zip = city_state_zip.group(3)
-    summary_header = ["customer", "email", "date", "order number", "popup number", "subtotal", "shipping",
-                       "Tax", "Shipping Tax", "total"
-        , "ship addr1", "ship addr2", "ship city", "ship state", "ship zip"]
-    if TAXES_INDEX == 999:
-        tax = '$0.00'
+        city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[idx['SHIP_TO'] + 3])
     else:
-        tax = k[TAXES_INDEX + 1]
-    order_summary = [k[BILL_TO_INDEX + 1], recipient_email, k[DATE_INDEX + 1],
-                     k[ORDER_NUM_INDEX + 1], k[POPUP_NUM_INDEX + 1],
-                     k[SUBTOTAL_INDEX + 1], tax, k[SandH_INDEX + 1],
-                     k[SandH_Tax_INDEX + 1], k[TOTAL_INDEX + 1],
-                     addr1, addr2, city, state, zip
-                     ]
+        addr1 = k[idx['SHIP_TO'] + 2]
+        addr2 = k[idx['SHIP_TO'] + 3]
+        city_state_zip = re.match(r'^([A-z\s\-\.]*)\s*\,\s([A-Z]{2})\s([0-9]{5})', k[idx['DATE'] - 1])
+    return addr1, addr2, city_state_zip.group(1), city_state_zip.group(2), city_state_zip.group(3)
+
+
+def invoice_parse(k, recipient_email, customer_type):
+    idx = _lookup_field_indices(k)
+    section_index = _compute_section_index(idx)
+    order_items = _extract_order_items(k, idx['ORDER_SUMMARY'], section_index)
+    tax = _get_tax(k, idx['TAXES'])
+    order_summary = [k[idx['CUSTOMER_NAME'] + 1], recipient_email, k[idx['DATE'] + 1],
+                     k[idx['ORDER_NUM'] + 1], k[idx['POPUP_NUM'] + 1],
+                     k[idx['SUBTOTAL'] + 1], tax, k[idx['SandH'] + 1],
+                     k[idx['SandH_Tax'] + 1], k[idx['TOTAL'] + 1]]
+    customer = [k[idx['CUSTOMER_NAME'] + 1], recipient_email, customer_type]
+    return customer, order_summary, order_items
+
+transfer_invoice_parse = lambda k, email: invoice_parse(k, email, "TRANSFER")
+retail_invoice_parse = lambda k, email: invoice_parse(k, email, "RETAIL")
+
+
+def paid_parse(k, recipient_email, is_transfer=False):
+    idx = _lookup_field_indices(k)
+    section_index = _compute_section_index(idx, use_discount_fallback=True)
+    order_items = _extract_order_items(k, idx['ORDER_SUMMARY'], section_index)
+    if is_transfer:
+        addr1, addr2, city, state, zip_code = _parse_shipping_address_transfer(k, idx)
+    else:
+        addr1, addr2, city, state, zip_code = _parse_shipping_address_retail(k, idx)
+    tax = _get_tax(k, idx['TAXES'])
+    order_summary = [k[idx['BILL_TO'] + 1], recipient_email, k[idx['DATE'] + 1],
+                     k[idx['ORDER_NUM'] + 1], k[idx['POPUP_NUM'] + 1],
+                     k[idx['SUBTOTAL'] + 1], tax, k[idx['SandH'] + 1],
+                     k[idx['SandH_Tax'] + 1], k[idx['TOTAL'] + 1],
+                     addr1, addr2, city, state, zip_code]
     order_items = extract_discount(order_items)
     return order_summary, order_items
+
+retail_paid_parse = lambda k, email: paid_parse(k, email, is_transfer=False)
+transfer_paid_parse = lambda k, email: paid_parse(k, email, is_transfer=True)
 
 def purchase_order_parse(k, recipient_email):
     BIN = "Bin"
