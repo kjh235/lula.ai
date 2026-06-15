@@ -59,6 +59,7 @@
                         <th>Style</th>
                         <th>Size</th>
                         <th>Family</th>
+                        <th>Product Family</th>
                         <th>Price</th>
                         <th>Stock</th>
                     </tr>
@@ -71,6 +72,7 @@
                         <td>{{ p.ProductStyle }}</td>
                         <td><span class="badge">{{ p.SizeNormalized or p.ProductSize }}</span></td>
                         <td>{{ p.SizingFamily or '' }}</td>
+                        <td>{{ p.ProductFamily or '' }}</td>
                         <td>${{ "%.2f" | format(p.UnitPrice) }}</td>
                         <td>{{ p.Quantity }}</td>
                     </tr>

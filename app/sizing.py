@@ -86,3 +86,26 @@ def available_sizes_for_family(family):
         if val not in seen:
             seen[val] = token
     return sorted(seen.items(), key=lambda x: x[0])
+
+
+PRODUCT_FAMILIES = ['Top', 'Skirt', 'Long Pants', 'Short Pants', 'Dress', 'Athleisure']
+
+_PRODUCT_FAMILY_RULES = [
+    ('Athleisure', {'legging', 'jogger', 'serena', 'athleisure'}),
+    ('Short Pants', {'monroe', 'shorts', 'short pant', 'bermuda'}),
+    ('Long Pants', {'maurine', 'palazzo', 'jean', 'denim', 'trouser', 'sashay pant'}),
+    ('Dress', {'carly', 'julia', 'nicole', 'joy', 'jade', 'nicki', 'dani', 'dress'}),
+    ('Skirt', {'cassie', 'azure', 'madison', 'lola', 'lucy', 'mimi', 'maxi', 'skirt', 'ivy'}),
+]
+
+
+def classify_product_family(product_name, product_style, sizing_family=None):
+    if sizing_family == 'leggings':
+        return 'Athleisure'
+    if sizing_family == 'denim':
+        return 'Long Pants'
+    text = ' '.join(filter(None, [product_name, product_style])).lower()
+    for family, keywords in _PRODUCT_FAMILY_RULES:
+        if any(kw in text for kw in keywords):
+            return family
+    return 'Top'

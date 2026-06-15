@@ -32,7 +32,8 @@ def init_db(db_path="app/bless.db"):
         ProductStyle TEXT NOT NULL,
         UnitPrice REAL NOT NULL,
         InvProductName TEXT NOT NULL,
-        ProductCategory TEXT NULL
+        ProductCategory TEXT NULL,
+        ProductFamily TEXT NULL
     )
     ''')
 
@@ -189,6 +190,10 @@ def init_db(db_path="app/bless.db"):
         cursor.execute("ALTER TABLE Products ADD COLUMN SizingFamily TEXT")
     except sqlite3.OperationalError:
         pass
+    try:
+        cursor.execute("ALTER TABLE Products ADD COLUMN ProductFamily TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS FitFeedback (
@@ -228,7 +233,7 @@ def init_db(db_path="app/bless.db"):
     ''')
     conn.commit()
 
-    from app.sizing import classify_family, normalize_size as _normalize_size
+    from app.sizing import classify_family, normalize_size as _normalize_size, classify_product_family
     needs_backfill = cursor.execute(
         "SELECT COUNT(*) FROM Products WHERE SizingFamily IS NULL"
     ).fetchone()[0]
@@ -243,6 +248,22 @@ def init_db(db_path="app/bless.db"):
             cursor.execute(
                 "UPDATE Products SET SizingFamily=?, SizeNormalized=? WHERE ProductID=?",
                 (family, norm, pid)
+            )
+        conn.commit()
+
+    needs_family_backfill = cursor.execute(
+        "SELECT COUNT(*) FROM Products WHERE ProductFamily IS NULL"
+    ).fetchone()[0]
+    if needs_family_backfill > 0:
+        rows = cursor.execute(
+            "SELECT ProductID, ProductName, ProductStyle, SizingFamily FROM Products WHERE ProductFamily IS NULL"
+        ).fetchall()
+        for row in rows:
+            pid, name, style, sizing_fam = row[0], row[1], row[2], row[3]
+            product_family = classify_product_family(name, style, sizing_fam)
+            cursor.execute(
+                "UPDATE Products SET ProductFamily=? WHERE ProductID=?",
+                (product_family, pid)
             )
         conn.commit()
 
