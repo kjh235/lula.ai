@@ -13,6 +13,13 @@ def _parse_money(value):
     return value.lstrip("$").replace(',', '')
 
 
+def _ensure_column(cursor, table, column, col_type):
+    try:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+    except sqlite3.OperationalError:
+        pass
+
+
 def init_db(db_path="app/bless.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -177,27 +184,12 @@ def init_db(db_path="app/bless.db"):
     )
     ''')
 
-    try:
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ledger_product ON InventoryLedger(ProductName)")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_invname ON Products(InvProductName)")
-    except sqlite3.OperationalError:
-        pass
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ledger_product ON InventoryLedger(ProductName)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_invname ON Products(InvProductName)")
 
-    try:
-        cursor.execute("ALTER TABLE Products ADD COLUMN SizeNormalized TEXT")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE Products ADD COLUMN SizingFamily TEXT")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE Products ADD COLUMN ProductFamily TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _ensure_column(cursor, "Products", "SizeNormalized", "TEXT")
+    _ensure_column(cursor, "Products", "SizingFamily", "TEXT")
+    _ensure_column(cursor, "Products", "ProductFamily", "TEXT")
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS FitFeedback (
@@ -214,16 +206,8 @@ def init_db(db_path="app/bless.db"):
     ''')
     conn.commit()
 
-    try:
-        cursor.execute("CREATE INDEX idx_fitfb_customer ON FitFeedback(CustomerID)")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("CREATE INDEX idx_fitfb_sku ON FitFeedback(ProductSKU)")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fitfb_customer ON FitFeedback(CustomerID)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fitfb_sku ON FitFeedback(ProductSKU)")
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Subscriptions (
