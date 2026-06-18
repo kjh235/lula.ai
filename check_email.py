@@ -1,4 +1,5 @@
 import base64
+import logging
 import sqlite3
 import os,binascii
 import gmail, email_parser, data_management
@@ -6,6 +7,8 @@ from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 from datetime import datetime
 import time
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = "app/bless.db"
 
@@ -15,7 +18,7 @@ def _fetch_gmail_messages(creds, search_query):
     result = service.users().messages().list(maxResults=500, userId='me', q=search_query).execute()
     messages = result.get('messages')
     for msg in messages:
-        print(msg['id'])
+        logger.debug("processing message %s", msg['id'])
         txt = service.users().messages().get(userId='me', id=msg['id'], format='raw').execute()
         data = txt['raw'].replace("-", "+").replace("_", "/")
         decoded_data = base64.b64decode(data)
@@ -36,7 +39,7 @@ def purchaseOrders(creds, search_query, db_path=DB_PATH):
                     data_management.insert_purchase_order_item(conn, items, summary[0])
                 data_management.apply_purchase_order_to_inventory(conn, summary[0])
             except Exception:
-                print(msg_id)
+                logger.error("failed to process message %s", msg_id)
 
 
 def retailInvoices(creds, search_query, db_path=DB_PATH):
@@ -49,7 +52,7 @@ def retailInvoices(creds, search_query, db_path=DB_PATH):
                 data_management.insert_order(conn, summary, numberOfItems)
                 data_management.update_order_type(conn, summary[3], "RETAIL")
             except Exception:
-                print(msg_id)
+                logger.error("failed to process message %s", msg_id)
 
 
 def retailPaid(creds, search_query, db_path=DB_PATH):
@@ -63,7 +66,7 @@ def retailPaid(creds, search_query, db_path=DB_PATH):
                     data_management.insert_order_item(conn, items, summary[3])
                 data_management.apply_order_to_inventory(conn, summary[3])
             except Exception:
-                print(msg_id)
+                logger.error("failed to process message %s", msg_id)
 
 
 def transferInvoices(creds, search_query, db_path=DB_PATH):
@@ -81,7 +84,7 @@ def transferInvoices(creds, search_query, db_path=DB_PATH):
                 else:
                     data_management.update_order_type(conn, summary[3], "TRANSFER_OUT")
             except Exception:
-                print(msg_id)
+                logger.error("failed to process message %s", msg_id)
 
 
 def transferPaid(creds, search_query, db_path=DB_PATH):
@@ -98,7 +101,7 @@ def transferPaid(creds, search_query, db_path=DB_PATH):
                 data_management.upsert_products_from_transfer_in(conn, summary[3])
                 data_management.apply_order_to_inventory(conn, summary[3])
             except Exception:
-                print(msg_id)
+                logger.error("failed to process message %s", msg_id)
 
 
 search_query_retail_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Order Number" after:2026/04/01'
@@ -108,6 +111,7 @@ search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"P
 search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2026/04/01'
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     data_management.init_db(DB_PATH)
     with sqlite3.connect(DB_PATH, timeout=10) as conn:
         data_management.init_task(conn, "CHECK_EMAILS")

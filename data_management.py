@@ -289,10 +289,9 @@ def insert_customer(dbconn, customerrec):
                            )
             dbconn.commit()
             logger.warning("adding customer ...")
-        print("customer saved")
+        logger.debug("customer saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("Customer failed to save")
+        logger.error("Customer failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -312,10 +311,9 @@ def insert_product(dbconn, productrec):
                        (UUID, productrec[0], productrec[1], productrec[4], productrec[3], cost, productrec[5])
                        )
             dbconn.commit()
-        print("product saved")
+        logger.debug("product saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("Product failed to save")
+        logger.error("Product failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -335,10 +333,9 @@ def update_product(dbconn, translations_path=None):
         try:
             cursor.execute("UPDATE Products SET InvProductName=? WHERE ProductID =?", (InvProductName, ProductID))
             dbconn.commit()
-            print("product saved")
+            logger.debug("product saved")
         except sqlite3.Error as e:
-            print(f"An error occurred: {e}")
-            print("Product failed to save")
+            logger.error("Product failed to save: %s", e)
             dbconn.rollback()
 
 
@@ -370,10 +367,9 @@ def insert_purchase_order(dbconn, purchase_order_rec):
                             float(Total), float(Pieces))
                            )
             dbconn.commit()
-        print("purchase order saved")
+        logger.debug("purchase order saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("purchase order failed to save")
+        logger.error("purchase order failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -393,10 +389,9 @@ def insert_purchase_order_item(dbconn, purchasedItemsRec, purchaseOrderNumber):
                     TotalCost, LlrPieces)
                    )
         dbconn.commit()
-        print("PO item saved")
+        logger.debug("PO item saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("po item failed to save")
+        logger.error("PO item failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -433,10 +428,9 @@ def insert_order(dbconn, retail_inv_rec, count_items):
                             float(InvDisc), float(InvTotal), float(InvPieces))
                            )
             dbconn.commit()
-            print("order saved")
+            logger.debug("order saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("order failed to save")
+        logger.error("order failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -475,12 +469,10 @@ def update_paid_order(conn, summary, numberOfItems, emailTime):
              city, state, zip, summary[3])
         )
         conn.commit()
-        print("order saved")
+        logger.debug("order saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("order failed to save")
+        logger.error("order failed to save: %s", e)
         conn.rollback()
-
 
 
 def update_transfer_type(conn, summary, my_email):
@@ -500,7 +492,7 @@ def update_order_type(conn, orderNumber, type):
         cursor.execute("UPDATE Orders SET OrderType=? WHERE OrderNumber =?", (type, orderNumber))
         conn.commit()
     except Exception:
-        print("order item failed to save")
+        logger.error("order type failed to save")
 
 
 def insert_order_item(conn, items, orderNumber):
@@ -522,10 +514,9 @@ def insert_order_item(conn, items, orderNumber):
         cursor.execute("INSERT OR IGNORE INTO OrderItems VALUES (?, ?, ?, ?, ?, ?, ?)",
                        (UUID, orderNumber, itemLine, itemName, float(itemPrice), float(itemDisc), float(itemTotal)))
         conn.commit()
-        print("order item saved")
+        logger.debug("order item saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("order item failed to save")
+        logger.error("order item failed to save: %s", e)
         conn.rollback()
 
 
@@ -536,11 +527,8 @@ def update_task_start_time(conn, task, time):
         conn.commit()
         return
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("task failed to save")
+        logger.error("task failed to save: %s", e)
         conn.rollback()
-
-
 
 
 def update_task_end_time(conn, task, time):
@@ -550,10 +538,8 @@ def update_task_end_time(conn, task, time):
         conn.commit()
         return
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("task failed to save")
+        logger.error("task failed to save: %s", e)
         conn.rollback()
-
 
 
 def init_task(conn, task):
@@ -565,8 +551,7 @@ def init_task(conn, task):
         conn.commit()
         return
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("task failed to save")
+        logger.error("task failed to save: %s", e)
         conn.rollback()
 
 
@@ -602,8 +587,7 @@ def record_inventory_event(conn, product_name, delta, event_type, order_number, 
         )
         conn.commit()
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("inventory event failed to save")
+        logger.error("inventory event failed to save: %s", e)
         conn.rollback()
     inserted = cursor.rowcount > 0
     if inserted:
@@ -645,8 +629,7 @@ def apply_order_to_inventory(conn, order_number):
             (order_number,)
         ).fetchone()
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("inventory failed to save")
+        logger.error("inventory failed to save: %s", e)
         conn.rollback()
 
     if row is None:

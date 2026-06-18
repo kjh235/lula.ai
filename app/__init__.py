@@ -1,5 +1,8 @@
+import logging
 import os
 from flask import Flask
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s: %(message)s')
 
 app = Flask(__name__)
 app.config['DB_PATH'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bless.db')

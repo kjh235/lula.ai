@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 import re
 
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 
 def remove_patterns(input_text, patterns_to_remove):
@@ -102,38 +105,30 @@ def get_order_summary(x):
 
         if EMAIL_TYPE_TO_PROCESS == "PO":
             order_summary, order_items, sku_list = purchase_order_parse(k, recipient_email)
-            print(order_summary)
-            print(order_items)
-            print(sku_list)
+            logger.debug("PO: summary=%s items=%s skus=%s", order_summary, order_items, sku_list)
             return sku_list, order_summary, order_items
 
         if EMAIL_TYPE_TO_PROCESS == "CUSTOMER_INV":
             customer, order_summary, order_items = retail_invoice_parse(k, recipient_email)
-            print(customer)
-            print(order_summary)
-            print(order_items)
+            logger.debug("CUSTOMER_INV: customer=%s summary=%s items=%s", customer, order_summary, order_items)
             return customer, order_summary, order_items
 
         if EMAIL_TYPE_TO_PROCESS == "CUSTOMER_PAID":
             order_summary, order_items = retail_paid_parse(k, recipient_email)
-            print(order_summary)
-            print(order_items)
+            logger.debug("CUSTOMER_PAID: summary=%s items=%s", order_summary, order_items)
             return order_summary, order_items
 
         if EMAIL_TYPE_TO_PROCESS == "TRANSFER_INV":
             customer, order_summary, order_items = transfer_invoice_parse(k, recipient_email)
-            print(customer)
-            print(order_summary)
-            print(order_items)
+            logger.debug("TRANSFER_INV: customer=%s summary=%s items=%s", customer, order_summary, order_items)
             return customer, order_summary, order_items
 
         if EMAIL_TYPE_TO_PROCESS == "TRANSFER_PAID":
             order_summary, order_items = transfer_paid_parse(k, recipient_email)
-            print(order_summary)
-            print(order_items)
+            logger.debug("TRANSFER_PAID: summary=%s items=%s", order_summary, order_items)
             return order_summary, order_items
     except Exception:
-        print("err")
+        logger.error("failed to parse email")
 
 
 def get_index(text_to_find, k):
