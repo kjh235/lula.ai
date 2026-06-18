@@ -7,8 +7,6 @@ from googleapiclient.discovery import build
 from datetime import datetime
 import time
 
-data_management.init_db()
-
 
 def _fetch_gmail_messages(creds, search_query):
     service = build('gmail', 'v1', credentials=creds)
@@ -107,15 +105,17 @@ search_query_purchase = 'from:noreply@lularoe.com subject: "LuLaRoe Wholesale Or
 search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Purchase Receipt from LuLaRoe - Order Number" after:2026/05/01'
 search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2026/04/01'
 
-with sqlite3.connect("app/bless.db", timeout=10) as conn:
-    data_management.init_task(conn,"CHECK_EMAILS")
-    data_management.update_task_start_time(conn,"CHECK_EMAILS", time.time())
-creds = gmail.gmail_creds()
-with sqlite3.connect("app/bless.db", timeout=10) as conn:
-    purchaseOrders(creds, search_query_purchase)
-    #retailInvoices(creds, search_query_retail_invoices)
-    #retailPaid(creds, search_query_retail_paid)
-    #transferInvoices(creds, search_query_transfer_invoices)
-    #transferPaid(creds,search_query_transfer_paid)
-with sqlite3.connect("app/bless.db", timeout=10) as conn:
-    data_management.update_task_end_time(conn,"CHECK_EMAILS", time.time())
+if __name__ == '__main__':
+    data_management.init_db()
+    with sqlite3.connect("app/bless.db", timeout=10) as conn:
+        data_management.init_task(conn, "CHECK_EMAILS")
+        data_management.update_task_start_time(conn, "CHECK_EMAILS", time.time())
+    creds = gmail.gmail_creds()
+    with sqlite3.connect("app/bless.db", timeout=10) as conn:
+        purchaseOrders(creds, search_query_purchase)
+        #retailInvoices(creds, search_query_retail_invoices)
+        #retailPaid(creds, search_query_retail_paid)
+        #transferInvoices(creds, search_query_transfer_invoices)
+        #transferPaid(creds, search_query_transfer_paid)
+    with sqlite3.connect("app/bless.db", timeout=10) as conn:
+        data_management.update_task_end_time(conn, "CHECK_EMAILS", time.time())
