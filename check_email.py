@@ -7,6 +7,8 @@ from googleapiclient.discovery import build
 from datetime import datetime
 import time
 
+DB_PATH = "app/bless.db"
+
 
 def _fetch_gmail_messages(creds, search_query):
     service = build('gmail', 'v1', credentials=creds)
@@ -22,9 +24,9 @@ def _fetch_gmail_messages(creds, search_query):
         yield msg['id'], decoded_data, email_time, service
 
 
-def purchaseOrders(creds, search_query):
+def purchaseOrders(creds, search_query, db_path=DB_PATH):
     for msg_id, decoded_data, _, _ in _fetch_gmail_messages(creds, search_query):
-        with sqlite3.connect("app/bless.db") as conn:
+        with sqlite3.connect(db_path) as conn:
             sku_list, summary, POitems = email_parser.get_order_summary(decoded_data)
             try:
                 for rows in (sku_list,) if type(sku_list[0]) is not list else sku_list:
@@ -37,9 +39,9 @@ def purchaseOrders(creds, search_query):
                 print(msg_id)
 
 
-def retailInvoices(creds, search_query):
+def retailInvoices(creds, search_query, db_path=DB_PATH):
     for msg_id, decoded_data, _, _ in _fetch_gmail_messages(creds, search_query):
-        with sqlite3.connect("app/bless.db") as conn:
+        with sqlite3.connect(db_path) as conn:
             try:
                 customer, summary, orderItems = email_parser.get_order_summary(decoded_data)
                 data_management.insert_customer(conn, customer)
@@ -50,9 +52,9 @@ def retailInvoices(creds, search_query):
                 print(msg_id)
 
 
-def retailPaid(creds, search_query):
+def retailPaid(creds, search_query, db_path=DB_PATH):
     for msg_id, decoded_data, email_time, _ in _fetch_gmail_messages(creds, search_query):
-        with sqlite3.connect("app/bless.db") as conn:
+        with sqlite3.connect(db_path) as conn:
             summary, orderItems = email_parser.get_order_summary(decoded_data)
             numberOfItems = len(orderItems)
             try:
@@ -64,11 +66,11 @@ def retailPaid(creds, search_query):
                 print(msg_id)
 
 
-def transferInvoices(creds, search_query):
+def transferInvoices(creds, search_query, db_path=DB_PATH):
     service = build('gmail', 'v1', credentials=creds)
     my_email = service.users().getProfile(userId='me').execute()['emailAddress']
     for msg_id, decoded_data, _, _ in _fetch_gmail_messages(creds, search_query):
-        with sqlite3.connect("app/bless.db") as conn:
+        with sqlite3.connect(db_path) as conn:
             try:
                 customer, summary, orderItems = email_parser.get_order_summary(decoded_data)
                 data_management.insert_customer(conn, customer)
@@ -82,11 +84,11 @@ def transferInvoices(creds, search_query):
                 print(msg_id)
 
 
-def transferPaid(creds, search_query):
+def transferPaid(creds, search_query, db_path=DB_PATH):
     service = build('gmail', 'v1', credentials=creds)
     my_email = service.users().getProfile(userId='me').execute()['emailAddress']
     for msg_id, decoded_data, email_time, _ in _fetch_gmail_messages(creds, search_query):
-        with sqlite3.connect("app/bless.db") as conn:
+        with sqlite3.connect(db_path) as conn:
             try:
                 summary, orderItems = email_parser.get_order_summary(decoded_data)
                 numberOfItems = len(orderItems)
@@ -106,16 +108,16 @@ search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"P
 search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2026/04/01'
 
 if __name__ == '__main__':
-    data_management.init_db()
-    with sqlite3.connect("app/bless.db", timeout=10) as conn:
+    data_management.init_db(DB_PATH)
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         data_management.init_task(conn, "CHECK_EMAILS")
         data_management.update_task_start_time(conn, "CHECK_EMAILS", time.time())
     creds = gmail.gmail_creds()
-    with sqlite3.connect("app/bless.db", timeout=10) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         purchaseOrders(creds, search_query_purchase)
         #retailInvoices(creds, search_query_retail_invoices)
         #retailPaid(creds, search_query_retail_paid)
         #transferInvoices(creds, search_query_transfer_invoices)
         #transferPaid(creds, search_query_transfer_paid)
-    with sqlite3.connect("app/bless.db", timeout=10) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         data_management.update_task_end_time(conn, "CHECK_EMAILS", time.time())
