@@ -9,6 +9,10 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
+def _parse_money(value):
+    return value.lstrip("$").replace(',', '')
+
+
 def init_db(db_path="app/bless.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -347,10 +351,10 @@ def insert_purchase_order(dbconn, purchase_order_rec):
         OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S %p")
     except ValueError:
         OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S")
-    Subtotal = purchase_order_rec[3].lstrip("$").replace(',','')
-    Shipping = purchase_order_rec[4].lstrip("$").replace(',','')
-    Taxes = purchase_order_rec[5].lstrip("$").replace(',','')
-    Total = purchase_order_rec[6].lstrip("$").replace(',','')
+    Subtotal = _parse_money(purchase_order_rec[3])
+    Shipping = _parse_money(purchase_order_rec[4])
+    Taxes = _parse_money(purchase_order_rec[5])
+    Total = _parse_money(purchase_order_rec[6])
     Pieces = purchase_order_rec[7]
 
     try:
@@ -380,8 +384,8 @@ def insert_purchase_order_item(dbconn, purchasedItemsRec, purchaseOrderNumber):
     ProductSKU = purchasedItemsRec[2]
     ProductName = purchasedItemsRec[3]
     Quantity = purchasedItemsRec[1]
-    CostPerUnit = purchasedItemsRec[5].lstrip("$").replace(',','')
-    TotalCost = purchasedItemsRec[6].lstrip("$").replace(',','')
+    CostPerUnit = _parse_money(purchasedItemsRec[5])
+    TotalCost = _parse_money(purchasedItemsRec[6])
     LlrPieces = purchasedItemsRec[4]
     try:
         cursor.execute("INSERT INTO PurchaseOrderItems VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -407,12 +411,12 @@ def insert_order(dbconn, retail_inv_rec, count_items):
         InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
     except ValueError:
         InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
-    InvSubtotal = retail_inv_rec[5].lstrip("$").replace(',', '')
-    InvShipping = retail_inv_rec[7].lstrip("$").replace(',', '')
-    InvTaxes = retail_inv_rec[6].lstrip("$").replace(',', '')
-    InvShippingTaxes = retail_inv_rec[8].lstrip("$").replace(',', '')
+    InvSubtotal = _parse_money(retail_inv_rec[5])
+    InvShipping = _parse_money(retail_inv_rec[7])
+    InvTaxes = _parse_money(retail_inv_rec[6])
+    InvShippingTaxes = _parse_money(retail_inv_rec[8])
     InvDisc = 0
-    InvTotal = retail_inv_rec[9].lstrip("$").replace(',', '')
+    InvTotal = _parse_money(retail_inv_rec[9])
     InvPieces = count_items
 
     try:
@@ -446,12 +450,12 @@ def update_paid_order(conn, summary, numberOfItems, emailTime):
         PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
     except ValueError:
         PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
-    PaidSubtotal = summary[5].lstrip("$").replace(',', '')
-    PaidShipping = summary[7].lstrip("$").replace(',', '')
-    PaidTaxes = summary[6].lstrip("$").replace(',', '')
-    PaidShipTaxes = summary[8].lstrip("$").replace(',', '')
+    PaidSubtotal = _parse_money(summary[5])
+    PaidShipping = _parse_money(summary[7])
+    PaidTaxes = _parse_money(summary[6])
+    PaidShipTaxes = _parse_money(summary[8])
     PaidDisc = 0
-    PaidTotal = summary[9].lstrip("$").replace(',', '')
+    PaidTotal = _parse_money(summary[9])
     PaidPieces = numberOfItems
     addr1 = summary[10]
     addr2 = summary[11]
@@ -504,14 +508,14 @@ def insert_order_item(conn, items, orderNumber):
     UUID = binascii.b2a_hex(os.urandom(12))
     if type(items[0]) is str:
         itemName = items[0]
-        itemPrice = items[1].lstrip("$").replace(',', '')
+        itemPrice = _parse_money(items[1])
         itemDisc = 0
         itemTotal = itemPrice
         itemLine = items[2]
     else:
         itemName = items[0][0]
-        itemPrice = items[0][1].lstrip("$").replace(',', '')
-        itemDisc = items[1][1].lstrip("-").lstrip("$").replace(',', '')
+        itemPrice = _parse_money(items[0][1])
+        itemDisc = _parse_money(items[1][1].lstrip("-"))
         itemTotal = float(itemPrice) - float(itemDisc)
         itemLine = items[0][2]
     try:
