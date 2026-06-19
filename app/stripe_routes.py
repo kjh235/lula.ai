@@ -5,7 +5,7 @@ import binascii
 from datetime import datetime
 
 import stripe
-from flask import Blueprint, jsonify, render_template, request, current_app
+from flask import Blueprint, jsonify, render_template, request, current_app, session
 
 from app.db import get_conn
 
@@ -30,6 +30,9 @@ def create_checkout_session():
     if not keys.get("secret_key"):
         return jsonify(error="Stripe is not configured"), 500
 
+    user_id = session.get('user_id', '')
+    user_email = session.get('user_email', '')
+
     try:
         checkout_session = stripe.checkout.Session.create(
             success_url=request.host_url + "success?session_id={CHECKOUT_SESSION_ID}",
@@ -37,6 +40,8 @@ def create_checkout_session():
             payment_method_types=["card"],
             mode="subscription",
             line_items=[{"price": keys["price_id"], "quantity": 1}],
+            metadata={"user_id": user_id},
+            customer_email=user_email or None,
         )
         return jsonify({"sessionId": checkout_session["id"]})
     except Exception as e:
@@ -79,10 +84,11 @@ def stripe_webhook():
     return "OK", 200
 
 
-def _handle_checkout_completed(session):
-    sub_id = session.get("subscription")
-    customer_id = session.get("customer")
-    customer_email = session.get("customer_details", {}).get("email", "")
+def _handle_checkout_completed(session_obj):
+    sub_id = session_obj.get("subscription")
+    customer_id = session_obj.get("customer")
+    customer_email = session_obj.get("customer_details", {}).get("email", "")
+    user_id = session_obj.get("metadata", {}).get("user_id")
 
     if not sub_id:
         logger.warning("checkout.session.completed with no subscription id")
@@ -92,10 +98,17 @@ def _handle_checkout_completed(session):
     try:
         sid = binascii.b2a_hex(os.urandom(12)).decode()
         conn.execute(
-            "INSERT OR REPLACE INTO Subscriptions "
-            "(ID, StripeSubscriptionID, StripeCustomerID, CustomerEmail, Status, CreatedAt) "
-            "VALUES (?, ?, ?, ?, 'active', ?)",
-            (sid, sub_id, customer_id, customer_email, datetime.utcnow().isoformat()),
+            "INSERT INTO Subscriptions "
+            "(ID, UserID, StripeSubscriptionID, StripeCustomerID, CustomerEmail, Status, CreatedAt) "
+            "VALUES (%s, %s, %s, %s, %s, 'active', %s) "
+            "ON CONFLICT (StripeSubscriptionID) DO UPDATE SET "
+            "UserID = EXCLUDED.UserID, "
+            "StripeCustomerID = EXCLUDED.StripeCustomerID, "
+            "CustomerEmail = EXCLUDED.CustomerEmail, "
+            "Status = EXCLUDED.Status, "
+            "CreatedAt = EXCLUDED.CreatedAt",
+            (sid, user_id, sub_id, customer_id, customer_email,
+             datetime.utcnow().isoformat()),
         )
         conn.commit()
         logger.info("Subscription %s saved for %s", sub_id, customer_email)
@@ -110,7 +123,7 @@ def _handle_subscription_updated(subscription):
     conn = get_conn()
     try:
         conn.execute(
-            "UPDATE Subscriptions SET Status=? WHERE StripeSubscriptionID=?",
+            "UPDATE Subscriptions SET Status=%s WHERE StripeSubscriptionID=%s",
             (status, sub_id),
         )
         conn.commit()
@@ -124,7 +137,7 @@ def _handle_subscription_deleted(subscription):
     conn = get_conn()
     try:
         conn.execute(
-            "UPDATE Subscriptions SET Status='canceled' WHERE StripeSubscriptionID=?",
+            "UPDATE Subscriptions SET Status='canceled' WHERE StripeSubscriptionID=%s",
             (sub_id,),
         )
         conn.commit()

@@ -3,56 +3,63 @@
 Usage:
     python -m app.ml.train              # train and save artifacts
     python -m app.ml.train --eval       # train with holdout evaluation
-    python -m app.ml.train --seed       # generate implicit feedback from repeat purchases
+    python -m app.ml.train --seed <user_id>  # generate implicit feedback from repeat purchases
 """
 
 import argparse
 import logging
 import os
 import pickle
-import sqlite3
 import binascii
 from collections import defaultdict
 from datetime import datetime
 
-from app.sizing import classify_family, normalize_size
+import psycopg2
+import psycopg2.extras
+
+from app.sizing import classify_family, normalize_size as _normalize_size, classify_product_family
 from app.ml.similarity import build_similarity_index
 from app.ml.size_model import SizeFitModel
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'bless.db')
 ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'artifacts')
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(os.environ['DATABASE_URL'])
+    conn.cursor_factory = psycopg2.extras.DictCursor
     return conn
 
 
 def load_products(conn):
-    rows = conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         "SELECT ProductSKU, ProductName, ProductStyle, ProductSize, "
         "UnitPrice, InvProductName, SizingFamily, SizeNormalized FROM Products"
-    ).fetchall()
+    )
+    rows = cur.fetchall()
     return [dict(r) for r in rows]
 
 
 def load_order_items(conn):
-    rows = conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         "SELECT oi.OrderNumber, oi.ProductName, p.ProductSKU "
         "FROM OrderItems oi "
-        "LEFT JOIN Products p ON p.InvProductName = oi.ProductName"
-    ).fetchall()
+        "LEFT JOIN Products p ON p.InvProductName = oi.ProductName AND p.UserID = oi.UserID"
+    )
+    rows = cur.fetchall()
     return [dict(r) for r in rows]
 
 
 def load_fit_feedback(conn):
-    rows = conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         "SELECT CustomerID, ProductSKU, SizePurchased, FitOutcome, Source "
         "FROM FitFeedback"
-    ).fetchall()
+    )
+    rows = cur.fetchall()
     return [
         {
             'customer_id': r['CustomerID'],
@@ -64,28 +71,34 @@ def load_fit_feedback(conn):
     ]
 
 
-def seed_implicit_feedback(conn):
-    """Generate implicit true_to_size feedback from repeat purchases."""
-    rows = conn.execute(
+def seed_implicit_feedback(conn, user_id):
+    """Generate implicit true_to_size feedback from repeat purchases for a user."""
+    cur = conn.cursor()
+    cur.execute(
         "SELECT c.CustomerID, p.ProductSKU, p.SizingFamily, p.SizeNormalized, "
         "COUNT(*) as cnt "
         "FROM Orders o "
-        "JOIN OrderItems oi ON o.OrderNumber = oi.OrderNumber "
-        "JOIN Products p ON p.InvProductName = oi.ProductName "
-        "JOIN Customers c ON c.CustomerEmail = o.OrderEmail "
-        "WHERE p.SizingFamily IS NOT NULL "
-        "GROUP BY c.CustomerID, p.SizingFamily, p.SizeNormalized "
-        "HAVING cnt >= 2"
-    ).fetchall()
+        "JOIN OrderItems oi ON o.OrderNumber = oi.OrderNumber AND oi.UserID = o.UserID "
+        "JOIN Products p ON p.InvProductName = oi.ProductName AND p.UserID = o.UserID "
+        "JOIN Customers c ON c.CustomerEmail = o.OrderEmail AND c.UserID = o.UserID "
+        "WHERE p.SizingFamily IS NOT NULL AND o.UserID = %s "
+        "GROUP BY c.CustomerID, p.ProductSKU, p.SizingFamily, p.SizeNormalized "
+        "HAVING COUNT(*) >= 2",
+        (user_id,)
+    )
+    rows = cur.fetchall()
 
-    cursor = conn.cursor()
     inserted = 0
     for r in rows:
         fid = binascii.b2a_hex(os.urandom(12)).decode()
         try:
-            cursor.execute(
-                "INSERT INTO FitFeedback VALUES (?, ?, ?, NULL, ?, 'true_to_size', 'implicit_repeat', ?)",
-                (fid, r['CustomerID'], r['ProductSKU'], r['SizeNormalized'],
+            cur.execute(
+                "INSERT INTO FitFeedback "
+                "(FeedbackID, UserID, CustomerID, ProductSKU, OrderNumber, SizePurchased, "
+                "FitOutcome, Source, CreatedAt) "
+                "VALUES (%s, %s, %s, %s, NULL, %s, 'true_to_size', 'implicit_repeat', %s) "
+                "ON CONFLICT DO NOTHING",
+                (fid, user_id, r['CustomerID'], r['ProductSKU'], r['SizeNormalized'],
                  datetime.utcnow().isoformat())
             )
             inserted += 1
@@ -152,7 +165,7 @@ def evaluate_size_models(feedback, products, holdout_ratio=0.1):
             pred_size, _ = model.predict_best_size(rec['customer_id'], rec['product_sku'], family)
             if pred_size is None:
                 continue
-            actual = normalize_size(rec['size_purchased'])
+            actual = _normalize_size(rec['size_purchased'])
             if rec['fit_outcome'] == 'true_to_size' and pred_size == actual:
                 correct += 1
             total += 1
@@ -167,14 +180,14 @@ def evaluate_size_models(feedback, products, holdout_ratio=0.1):
 def main():
     parser = argparse.ArgumentParser(description='Train recommendation models')
     parser.add_argument('--eval', action='store_true', help='Run holdout evaluation')
-    parser.add_argument('--seed', action='store_true', help='Seed implicit feedback from repeat purchases')
+    parser.add_argument('--seed', metavar='USER_ID', help='Seed implicit feedback for a user')
     args = parser.parse_args()
 
     os.makedirs(ARTIFACTS_DIR, exist_ok=True)
     conn = get_conn()
 
     if args.seed:
-        seed_implicit_feedback(conn)
+        seed_implicit_feedback(conn, args.seed)
 
     products = load_products(conn)
     order_items = load_order_items(conn)

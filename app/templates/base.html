@@ -22,7 +22,13 @@
             <a class="sidebar-link{% if active_page == 'purchase_order' %} active{% endif %}" href="/purchase-order">Order Planning</a>
             <a class="sidebar-link{% if active_page == 'settings' %} active{% endif %}" href="/settings/credentials">Settings</a>
         </nav>
-        <a class="sidebar-link sign-out" href="/">Sign Out</a>
+        <div class="sidebar-footer">
+            {% if session.get('user_name') %}
+            <span class="sidebar-user">{{ session['user_name'] }}</span>
+            {% endif %}
+            <button class="sidebar-link sync-btn" onclick="syncEmails(this)">Sync Emails</button>
+            <a class="sidebar-link sign-out" href="/logout">Sign Out</a>
+        </div>
     </aside>
     <div class="main">
         <div class="top-bar">
@@ -32,5 +38,21 @@
             {% block content %}{% endblock %}
         </div>
     </div>
+    <script>
+    function syncEmails(btn) {
+        btn.disabled = true;
+        btn.textContent = 'Syncing...';
+        fetch('/sync', {method: 'POST'})
+            .then(r => r.json())
+            .then(d => {
+                btn.textContent = d.error ? 'Sync Failed' : 'Sync Done';
+                setTimeout(() => { btn.disabled = false; btn.textContent = 'Sync Emails'; }, 3000);
+            })
+            .catch(() => {
+                btn.textContent = 'Sync Failed';
+                setTimeout(() => { btn.disabled = false; btn.textContent = 'Sync Emails'; }, 3000);
+            });
+    }
+    </script>
 </body>
 </html>
