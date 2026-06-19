@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import pickle
 import sqlite3
@@ -17,6 +18,8 @@ from datetime import datetime
 from app.sizing import classify_family, normalize_size
 from app.ml.similarity import build_similarity_index
 from app.ml.size_model import SizeFitModel
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'bless.db')
 ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'artifacts')
@@ -89,14 +92,14 @@ def seed_implicit_feedback(conn):
         except Exception:
             pass
     conn.commit()
-    print(f"Seeded {inserted} implicit feedback records")
+    logger.info("Seeded %d implicit feedback records", inserted)
     return inserted
 
 
 def train_similarity(products, order_items):
-    print(f"Training similarity model on {len(products)} products, {len(order_items)} order items...")
+    logger.info("Training similarity model on %d products, %d order items...", len(products), len(order_items))
     index = build_similarity_index(products, order_items, alpha=0.6, top_k=20)
-    print(f"Similarity index built for {len(index)} products")
+    logger.info("Similarity index built for %d products", len(index))
     return index
 
 
@@ -110,13 +113,13 @@ def train_size_models(feedback, products):
 
     models = {}
     for family, records in feedback_by_family.items():
-        print(f"Training size model for '{family}' with {len(records)} feedback records...")
+        logger.info("Training size model for '%s' with %d feedback records...", family, len(records))
         model = SizeFitModel()
         model.fit(records, family)
         models[family] = model
         n_customers = len(model.customer_size)
         n_products = len(model.product_offset)
-        print(f"  -> {n_customers} customers, {n_products} products")
+        logger.info("  -> %d customers, %d products", n_customers, n_products)
 
     return models
 
@@ -132,7 +135,7 @@ def evaluate_size_models(feedback, products, holdout_ratio=0.1):
 
     for family, records in feedback_by_family.items():
         if len(records) < 10:
-            print(f"'{family}': too few records ({len(records)}) for evaluation")
+            logger.info("'%s': too few records (%d) for evaluation", family, len(records))
             continue
 
         random.shuffle(records)
@@ -156,9 +159,9 @@ def evaluate_size_models(feedback, products, holdout_ratio=0.1):
 
         if total > 0:
             acc = correct / total
-            print(f"'{family}': accuracy {acc:.2%} ({correct}/{total} on holdout)")
+            logger.info("'%s': accuracy %.2f%% (%d/%d on holdout)", family, acc * 100, correct, total)
         else:
-            print(f"'{family}': no testable holdout records")
+            logger.info("'%s': no testable holdout records", family)
 
 
 def main():
@@ -177,25 +180,27 @@ def main():
     order_items = load_order_items(conn)
     feedback = load_fit_feedback(conn)
 
-    print(f"Loaded {len(products)} products, {len(order_items)} order items, {len(feedback)} feedback records")
+    logger.info("Loaded %d products, %d order items, %d feedback records",
+                len(products), len(order_items), len(feedback))
 
     sim_index = train_similarity(products, order_items)
     with open(os.path.join(ARTIFACTS_DIR, 'similarity.pkl'), 'wb') as f:
         pickle.dump(sim_index, f)
-    print(f"Saved similarity index to {ARTIFACTS_DIR}/similarity.pkl")
+    logger.info("Saved similarity index to %s/similarity.pkl", ARTIFACTS_DIR)
 
     size_models = train_size_models(feedback, products)
     with open(os.path.join(ARTIFACTS_DIR, 'size_model.pkl'), 'wb') as f:
         pickle.dump(size_models, f)
-    print(f"Saved size models to {ARTIFACTS_DIR}/size_model.pkl")
+    logger.info("Saved size models to %s/size_model.pkl", ARTIFACTS_DIR)
 
     if args.eval and feedback:
-        print("\n--- Holdout Evaluation ---")
+        logger.info("--- Holdout Evaluation ---")
         evaluate_size_models(feedback, products)
 
     conn.close()
-    print("\nTraining complete.")
+    logger.info("Training complete.")
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
     main()

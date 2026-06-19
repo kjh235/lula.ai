@@ -9,6 +9,17 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
+def _parse_money(value):
+    return value.lstrip("$").replace(',', '')
+
+
+def _ensure_column(cursor, table, column, col_type):
+    try:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+    except sqlite3.OperationalError:
+        pass
+
+
 def init_db(db_path="app/bless.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -173,27 +184,12 @@ def init_db(db_path="app/bless.db"):
     )
     ''')
 
-    try:
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ledger_product ON InventoryLedger(ProductName)")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_invname ON Products(InvProductName)")
-    except sqlite3.OperationalError:
-        pass
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ledger_product ON InventoryLedger(ProductName)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_invname ON Products(InvProductName)")
 
-    try:
-        cursor.execute("ALTER TABLE Products ADD COLUMN SizeNormalized TEXT")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE Products ADD COLUMN SizingFamily TEXT")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE Products ADD COLUMN ProductFamily TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _ensure_column(cursor, "Products", "SizeNormalized", "TEXT")
+    _ensure_column(cursor, "Products", "SizingFamily", "TEXT")
+    _ensure_column(cursor, "Products", "ProductFamily", "TEXT")
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS FitFeedback (
@@ -210,16 +206,8 @@ def init_db(db_path="app/bless.db"):
     ''')
     conn.commit()
 
-    try:
-        cursor.execute("CREATE INDEX idx_fitfb_customer ON FitFeedback(CustomerID)")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("CREATE INDEX idx_fitfb_sku ON FitFeedback(ProductSKU)")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fitfb_customer ON FitFeedback(CustomerID)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fitfb_sku ON FitFeedback(ProductSKU)")
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Subscriptions (
@@ -285,10 +273,9 @@ def insert_customer(dbconn, customerrec):
                            )
             dbconn.commit()
             logger.warning("adding customer ...")
-        print("customer saved")
+        logger.debug("customer saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("Customer failed to save")
+        logger.error("Customer failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -308,10 +295,9 @@ def insert_product(dbconn, productrec):
                        (UUID, productrec[0], productrec[1], productrec[4], productrec[3], cost, productrec[5])
                        )
             dbconn.commit()
-        print("product saved")
+        logger.debug("product saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("Product failed to save")
+        logger.error("Product failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -331,10 +317,9 @@ def update_product(dbconn, translations_path=None):
         try:
             cursor.execute("UPDATE Products SET InvProductName=? WHERE ProductID =?", (InvProductName, ProductID))
             dbconn.commit()
-            print("product saved")
+            logger.debug("product saved")
         except sqlite3.Error as e:
-            print(f"An error occurred: {e}")
-            print("Product failed to save")
+            logger.error("Product failed to save: %s", e)
             dbconn.rollback()
 
 
@@ -347,10 +332,10 @@ def insert_purchase_order(dbconn, purchase_order_rec):
         OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S %p")
     except ValueError:
         OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S")
-    Subtotal = purchase_order_rec[3].lstrip("$").replace(',','')
-    Shipping = purchase_order_rec[4].lstrip("$").replace(',','')
-    Taxes = purchase_order_rec[5].lstrip("$").replace(',','')
-    Total = purchase_order_rec[6].lstrip("$").replace(',','')
+    Subtotal = _parse_money(purchase_order_rec[3])
+    Shipping = _parse_money(purchase_order_rec[4])
+    Taxes = _parse_money(purchase_order_rec[5])
+    Total = _parse_money(purchase_order_rec[6])
     Pieces = purchase_order_rec[7]
 
     try:
@@ -366,10 +351,9 @@ def insert_purchase_order(dbconn, purchase_order_rec):
                             float(Total), float(Pieces))
                            )
             dbconn.commit()
-        print("purchase order saved")
+        logger.debug("purchase order saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("purchase order failed to save")
+        logger.error("purchase order failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -380,8 +364,8 @@ def insert_purchase_order_item(dbconn, purchasedItemsRec, purchaseOrderNumber):
     ProductSKU = purchasedItemsRec[2]
     ProductName = purchasedItemsRec[3]
     Quantity = purchasedItemsRec[1]
-    CostPerUnit = purchasedItemsRec[5].lstrip("$").replace(',','')
-    TotalCost = purchasedItemsRec[6].lstrip("$").replace(',','')
+    CostPerUnit = _parse_money(purchasedItemsRec[5])
+    TotalCost = _parse_money(purchasedItemsRec[6])
     LlrPieces = purchasedItemsRec[4]
     try:
         cursor.execute("INSERT INTO PurchaseOrderItems VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -389,10 +373,9 @@ def insert_purchase_order_item(dbconn, purchasedItemsRec, purchaseOrderNumber):
                     TotalCost, LlrPieces)
                    )
         dbconn.commit()
-        print("PO item saved")
+        logger.debug("PO item saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("po item failed to save")
+        logger.error("PO item failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -407,12 +390,12 @@ def insert_order(dbconn, retail_inv_rec, count_items):
         InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
     except ValueError:
         InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
-    InvSubtotal = retail_inv_rec[5].lstrip("$").replace(',', '')
-    InvShipping = retail_inv_rec[7].lstrip("$").replace(',', '')
-    InvTaxes = retail_inv_rec[6].lstrip("$").replace(',', '')
-    InvShippingTaxes = retail_inv_rec[8].lstrip("$").replace(',', '')
+    InvSubtotal = _parse_money(retail_inv_rec[5])
+    InvShipping = _parse_money(retail_inv_rec[7])
+    InvTaxes = _parse_money(retail_inv_rec[6])
+    InvShippingTaxes = _parse_money(retail_inv_rec[8])
     InvDisc = 0
-    InvTotal = retail_inv_rec[9].lstrip("$").replace(',', '')
+    InvTotal = _parse_money(retail_inv_rec[9])
     InvPieces = count_items
 
     try:
@@ -429,10 +412,9 @@ def insert_order(dbconn, retail_inv_rec, count_items):
                             float(InvDisc), float(InvTotal), float(InvPieces))
                            )
             dbconn.commit()
-            print("order saved")
+            logger.debug("order saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("order failed to save")
+        logger.error("order failed to save: %s", e)
         dbconn.rollback()
 
 
@@ -446,12 +428,12 @@ def update_paid_order(conn, summary, numberOfItems, emailTime):
         PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
     except ValueError:
         PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
-    PaidSubtotal = summary[5].lstrip("$").replace(',', '')
-    PaidShipping = summary[7].lstrip("$").replace(',', '')
-    PaidTaxes = summary[6].lstrip("$").replace(',', '')
-    PaidShipTaxes = summary[8].lstrip("$").replace(',', '')
+    PaidSubtotal = _parse_money(summary[5])
+    PaidShipping = _parse_money(summary[7])
+    PaidTaxes = _parse_money(summary[6])
+    PaidShipTaxes = _parse_money(summary[8])
     PaidDisc = 0
-    PaidTotal = summary[9].lstrip("$").replace(',', '')
+    PaidTotal = _parse_money(summary[9])
     PaidPieces = numberOfItems
     addr1 = summary[10]
     addr2 = summary[11]
@@ -471,12 +453,10 @@ def update_paid_order(conn, summary, numberOfItems, emailTime):
              city, state, zip, summary[3])
         )
         conn.commit()
-        print("order saved")
+        logger.debug("order saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("order failed to save")
+        logger.error("order failed to save: %s", e)
         conn.rollback()
-
 
 
 def update_transfer_type(conn, summary, my_email):
@@ -496,7 +476,7 @@ def update_order_type(conn, orderNumber, type):
         cursor.execute("UPDATE Orders SET OrderType=? WHERE OrderNumber =?", (type, orderNumber))
         conn.commit()
     except Exception:
-        print("order item failed to save")
+        logger.error("order type failed to save")
 
 
 def insert_order_item(conn, items, orderNumber):
@@ -504,24 +484,23 @@ def insert_order_item(conn, items, orderNumber):
     UUID = binascii.b2a_hex(os.urandom(12))
     if type(items[0]) is str:
         itemName = items[0]
-        itemPrice = items[1].lstrip("$").replace(',', '')
+        itemPrice = _parse_money(items[1])
         itemDisc = 0
         itemTotal = itemPrice
         itemLine = items[2]
     else:
         itemName = items[0][0]
-        itemPrice = items[0][1].lstrip("$").replace(',', '')
-        itemDisc = items[1][1].lstrip("-").lstrip("$").replace(',', '')
+        itemPrice = _parse_money(items[0][1])
+        itemDisc = _parse_money(items[1][1].lstrip("-"))
         itemTotal = float(itemPrice) - float(itemDisc)
         itemLine = items[0][2]
     try:
         cursor.execute("INSERT OR IGNORE INTO OrderItems VALUES (?, ?, ?, ?, ?, ?, ?)",
                        (UUID, orderNumber, itemLine, itemName, float(itemPrice), float(itemDisc), float(itemTotal)))
         conn.commit()
-        print("order item saved")
+        logger.debug("order item saved")
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("order item failed to save")
+        logger.error("order item failed to save: %s", e)
         conn.rollback()
 
 
@@ -532,11 +511,8 @@ def update_task_start_time(conn, task, time):
         conn.commit()
         return
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("task failed to save")
+        logger.error("task failed to save: %s", e)
         conn.rollback()
-
-
 
 
 def update_task_end_time(conn, task, time):
@@ -546,10 +522,8 @@ def update_task_end_time(conn, task, time):
         conn.commit()
         return
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("task failed to save")
+        logger.error("task failed to save: %s", e)
         conn.rollback()
-
 
 
 def init_task(conn, task):
@@ -561,8 +535,7 @@ def init_task(conn, task):
         conn.commit()
         return
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("task failed to save")
+        logger.error("task failed to save: %s", e)
         conn.rollback()
 
 
@@ -598,8 +571,7 @@ def record_inventory_event(conn, product_name, delta, event_type, order_number, 
         )
         conn.commit()
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("inventory event failed to save")
+        logger.error("inventory event failed to save: %s", e)
         conn.rollback()
     inserted = cursor.rowcount > 0
     if inserted:
@@ -641,8 +613,7 @@ def apply_order_to_inventory(conn, order_number):
             (order_number,)
         ).fetchone()
     except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        print("inventory failed to save")
+        logger.error("inventory failed to save: %s", e)
         conn.rollback()
 
     if row is None:
