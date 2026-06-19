@@ -7,3 +7,5 @@ scipy
 beautifulsoup4
 openpyxl
 apscheduler
+playwright
+cryptography

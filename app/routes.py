@@ -1,11 +1,13 @@
+import asyncio
 import os
 import sqlite3
 import binascii
 from datetime import datetime
 
-from flask import render_template, jsonify, request
+from flask import render_template, jsonify, request, redirect, url_for, flash
 from app import app
 from app.db import get_conn
+from credential_manager import save_credentials, get_credentials, delete_credentials, PLATFORM_BLESS
 from app.recommendations import (
     get_customer_purchase_history,
     get_customer_info,
@@ -252,13 +254,6 @@ def purchase_orders():
         "LEFT JOIN matched_sales ms ON ms.ProductSKU = poi.ProductSKU "
         "  AND ms.PaidDate >= po.OrderDate "
         "GROUP BY po.OrderNumber, po.OrderDate, po.Total, pos.TotalUnitsOrdered "
-        "  SELECT oi.OrderItemID, oi.ProductName, oi.TotalPrice, o.PaidDate "
-        "  FROM OrderItems oi "
-        "  JOIN Orders o ON o.OrderNumber = oi.OrderNumber "
-        "  WHERE o.OrderType = 'RETAIL' AND o.PaidDate IS NOT NULL "
-        ") rs ON rs.ProductName = p.InvProductName AND rs.PaidDate >= po.OrderDate "
-        "WHERE poi.ProductSKU NOT IN ('5PctOff') "
-        "GROUP BY po.OrderNumber, po.OrderDate, po.Total "
         "ORDER BY po.OrderDate DESC"
     ).fetchall()
     conn.close()
@@ -315,10 +310,6 @@ def purchase_order_detail(order_number):
         "  COALESCE(SUM(ms.TotalPrice), 0) AS Revenue, "
         "  CASE WHEN COUNT(ms.OrderItemID) > 0 "
         "       THEN ROUND(AVG(JULIANDAY(ms.PaidDate) - JULIANDAY(po.OrderDate)), 1) "
-        "  COALESCE(SUM(rs.UnitsSold), 0) AS UnitsSold, "
-        "  COALESCE(SUM(rs.TotalRevenue), 0) AS Revenue, "
-        "  CASE WHEN COUNT(rs.UnitsSold) > 0 "
-        "       THEN ROUND(AVG(JULIANDAY(rs.PaidDate) - JULIANDAY(po.OrderDate)), 1) "
         "       ELSE NULL END AS AvgDaysToSell "
         "FROM PurchaseOrderItems poi "
         "JOIN PurchaseOrders po ON poi.OrderNumber = po.OrderNumber "
@@ -326,14 +317,6 @@ def purchase_order_detail(order_number):
         "LEFT JOIN matched_sales ms ON ms.ProductSKU = poi.ProductSKU "
         "  AND ms.PaidDate >= po.OrderDate "
         "WHERE poi.OrderNumber = ? "
-        "LEFT JOIN ("
-        " select OIS.ProductName, count(OIS.OrderItemID) as UnitsSold, sum(OIS.TotalPrice) as TotalRevenue, OIS.OrderNumber, OIS.PaidDate FROM "
-        "  (SELECT oi.OrderItemID, oi.ProductName, oi.TotalPrice, o.PaidDate, o.OrderNumber "
-        "  FROM OrderItems oi "
-        "  JOIN Orders o ON o.OrderNumber = oi.OrderNumber ) as OIS "
-        "  GROUP BY 	OIS.OrderNumber, OIS.PaidDate,OIS.ProductName "
-        ") rs ON rs.ProductName = p.InvProductName AND rs.PaidDate >= po.OrderDate "
-        "WHERE poi.OrderNumber = ? and poi.ProductSKU NOT IN ('5PctOff') "
         "GROUP BY poi.PurchaseItemID, poi.ProductSKU, poi.ProductName, "
         "         poi.Quantity, poi.CostPerUnit, poi.TotalCost, "
         "         p.InvProductName, p.UnitPrice "
@@ -437,3 +420,70 @@ def sync_now():
         return jsonify(result)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/settings/credentials", methods=["GET"])
+def credentials_settings():
+    db_path = app.config['DB_PATH']
+    existing = get_credentials(db_path, PLATFORM_BLESS)
+    last_sync = _last_bless_sync(db_path)
+    return render_template(
+        "settings_credentials.html",
+        username=existing[0] if existing else None,
+        last_sync=last_sync,
+    )
+
+
+@app.route("/settings/credentials", methods=["POST"])
+def credentials_settings_save():
+    db_path = app.config['DB_PATH']
+    action = request.form.get("action", "save")
+
+    if action == "delete":
+        delete_credentials(db_path, PLATFORM_BLESS)
+        flash("Credentials removed.", "info")
+        return redirect(url_for("credentials_settings"))
+
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "").strip()
+
+    if not username or not password:
+        flash("Username and password are required.", "error")
+        return redirect(url_for("credentials_settings"))
+
+    save_credentials(db_path, PLATFORM_BLESS, username, password)
+
+    # Validate by attempting a login in the background (non-blocking)
+    from lularoe_scraper import BlessScraper
+    from app import _scheduler
+    _scheduler.add_job(
+        func=lambda: asyncio.run(BlessScraper(db_path).run()),
+        id="bless_scrape_immediate",
+        replace_existing=True,
+    )
+
+    flash("Credentials saved. A sync has been queued.", "success")
+    return redirect(url_for("credentials_settings"))
+
+
+@app.route("/admin/scrape-now", methods=["POST"])
+def scrape_now():
+    from lularoe_scraper import BlessScraper
+    try:
+        result = asyncio.run(BlessScraper(app.config['DB_PATH']).run())
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+def _last_bless_sync(db_path):
+    try:
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT LastSyncedAt, RowsSynced FROM SyncLog "
+            "WHERE TableName LIKE 'bless_scrape_%' ORDER BY LastSyncedAt DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        return {"synced_at": row[0], "rows": row[1]} if row else None
+    except Exception:
+        return None
