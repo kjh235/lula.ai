@@ -2,12 +2,7 @@
 Browser automation for the LuLaRoe Bless consultant portal.
 
 Logs in with stored credentials, paginates through each data section,
-and upserts rows into the local bless.db.
-
-Selector notes:
-  The Bless portal is a React SPA at https://www.lularoebless.com.
-  If selectors break after a portal update, inspect the live page and
-  update the _SELECTORS dict below — no other code needs to change.
+and upserts rows into the PostgreSQL database.
 """
 
 import asyncio
@@ -15,7 +10,6 @@ import binascii
 import json
 import logging
 import os
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,24 +22,19 @@ logger = logging.getLogger(__name__)
 PORTAL_URL = "https://www.lularoebless.com"
 SESSION_FILE = Path("session_cache/bless_session.json")
 
-# Update these selectors if the portal's markup changes.
 _SELECTORS = {
-    # Login page
     "login_email":    'input[type="email"], input[name="email"], input[placeholder*="email" i]',
     "login_password": 'input[type="password"]',
     "login_submit":   'button[type="submit"]',
     "login_success":  '[data-testid="dashboard"], .dashboard, nav.main-nav',
 
-    # Navigation links — match href or text
     "nav_inventory":       'a[href*="inventory"]',
     "nav_orders":          'a[href*="orders"]:not([href*="purchase"])',
     "nav_purchase_orders": 'a[href*="purchase"]',
     "nav_customers":       'a[href*="customer"]',
 
-    # Table pagination
     "next_page": 'button[aria-label*="next" i], a[aria-label*="next" i], button:has-text("Next")',
 
-    # Inventory table
     "inventory_rows":    'table tbody tr, [data-testid="inventory-row"]',
     "inv_sku":           '[data-col="sku"], td:nth-child(1)',
     "inv_name":          '[data-col="name"], td:nth-child(2)',
@@ -54,7 +43,6 @@ _SELECTORS = {
     "inv_price":         '[data-col="price"], td:nth-child(5)',
     "inv_quantity":      '[data-col="quantity"], td:nth-child(6)',
 
-    # Retail orders table
     "order_rows":        'table tbody tr, [data-testid="order-row"]',
     "ord_number":        '[data-col="order-number"], td:nth-child(1)',
     "ord_email":         '[data-col="email"], td:nth-child(2)',
@@ -62,13 +50,11 @@ _SELECTORS = {
     "ord_total":         '[data-col="total"], td:nth-child(4)',
     "ord_pieces":        '[data-col="pieces"], td:nth-child(5)',
 
-    # Purchase orders table
     "po_rows":           'table tbody tr, [data-testid="po-row"]',
     "po_number":         '[data-col="po-number"], td:nth-child(1)',
     "po_date":           '[data-col="date"], td:nth-child(2)',
     "po_total":          '[data-col="total"], td:nth-child(3)',
 
-    # Customers table
     "customer_rows":     'table tbody tr, [data-testid="customer-row"]',
     "cust_name":         '[data-col="name"], td:nth-child(1)',
     "cust_email":        '[data-col="email"], td:nth-child(2)',
@@ -81,17 +67,13 @@ class AuthenticationError(Exception):
 
 
 class BlessScraper:
-    def __init__(self, db_path):
-        self.db_path = db_path
-
-    # ------------------------------------------------------------------
-    # Public entry point
-    # ------------------------------------------------------------------
+    def __init__(self, user_id):
+        self.user_id = user_id
 
     async def run(self):
-        creds = get_credentials(self.db_path, PLATFORM_BLESS)
+        creds = get_credentials(self.user_id, PLATFORM_BLESS)
         if not creds:
-            logger.warning("No Bless credentials found. Visit /settings/credentials to save them.")
+            logger.warning("No Bless credentials found for user %s.", self.user_id)
             return {"status": "no_credentials"}
 
         username, password = creds
@@ -119,16 +101,11 @@ class BlessScraper:
                 return results
 
             except AuthenticationError:
-                # Session was bad and login failed — clear cached session
                 if SESSION_FILE.exists():
                     SESSION_FILE.unlink()
                 raise
             finally:
                 await browser.close()
-
-    # ------------------------------------------------------------------
-    # Session helpers
-    # ------------------------------------------------------------------
 
     async def _load_session(self, browser):
         if SESSION_FILE.exists():
@@ -151,10 +128,6 @@ class BlessScraper:
         except PWTimeout:
             return False
 
-    # ------------------------------------------------------------------
-    # Login
-    # ------------------------------------------------------------------
-
     async def _login(self, page, username, password):
         await page.goto(f"{PORTAL_URL}/login", timeout=30_000)
         await page.wait_for_selector(_SELECTORS["login_email"], timeout=15_000)
@@ -170,12 +143,7 @@ class BlessScraper:
             )
         logger.info("Logged in to Bless portal as %s", username)
 
-    # ------------------------------------------------------------------
-    # Generic pagination helper
-    # ------------------------------------------------------------------
-
     async def _each_row(self, page, url, row_selector):
-        """Navigate to url, yield rows from every page of results."""
         await page.goto(url, timeout=30_000)
         while True:
             await page.wait_for_load_state("networkidle", timeout=20_000)
@@ -192,12 +160,9 @@ class BlessScraper:
             await next_btn.click()
             await page.wait_for_load_state("networkidle", timeout=20_000)
 
-    # ------------------------------------------------------------------
-    # Inventory
-    # ------------------------------------------------------------------
-
     async def _scrape_inventory(self, page):
-        conn = sqlite3.connect(self.db_path)
+        from app.db import get_conn
+        conn = get_conn()
         count = 0
         try:
             async for row in self._each_row(page, f"{PORTAL_URL}/inventory", _SELECTORS["inventory_rows"]):
@@ -211,8 +176,8 @@ class BlessScraper:
                 if not sku or not name:
                     continue
 
-                _upsert_product(conn, sku, name, style, size, price)
-                _upsert_inventory_snapshot(conn, name, quantity)
+                _upsert_product(conn, self.user_id, sku, name, style, size, price)
+                _upsert_inventory_snapshot(conn, self.user_id, name, quantity)
                 count += 1
             conn.commit()
         finally:
@@ -221,12 +186,9 @@ class BlessScraper:
         logger.info("Scraped %d inventory rows", count)
         return count
 
-    # ------------------------------------------------------------------
-    # Retail orders
-    # ------------------------------------------------------------------
-
     async def _scrape_retail_orders(self, page):
-        conn = sqlite3.connect(self.db_path)
+        from app.db import get_conn
+        conn = get_conn()
         count = 0
         try:
             async for row in self._each_row(page, f"{PORTAL_URL}/orders", _SELECTORS["order_rows"]):
@@ -239,7 +201,7 @@ class BlessScraper:
                 if not order_num:
                     continue
 
-                _upsert_order(conn, order_num, email, date, total, pieces, "RETAIL")
+                _upsert_order(conn, self.user_id, order_num, email, date, total, pieces, "RETAIL")
                 count += 1
             conn.commit()
         finally:
@@ -248,12 +210,9 @@ class BlessScraper:
         logger.info("Scraped %d retail orders", count)
         return count
 
-    # ------------------------------------------------------------------
-    # Purchase orders
-    # ------------------------------------------------------------------
-
     async def _scrape_purchase_orders(self, page):
-        conn = sqlite3.connect(self.db_path)
+        from app.db import get_conn
+        conn = get_conn()
         count = 0
         try:
             async for row in self._each_row(page, f"{PORTAL_URL}/purchase-orders", _SELECTORS["po_rows"]):
@@ -264,7 +223,7 @@ class BlessScraper:
                 if not po_num:
                     continue
 
-                _upsert_purchase_order(conn, po_num, date, total)
+                _upsert_purchase_order(conn, self.user_id, po_num, date, total)
                 count += 1
             conn.commit()
         finally:
@@ -273,12 +232,9 @@ class BlessScraper:
         logger.info("Scraped %d purchase orders", count)
         return count
 
-    # ------------------------------------------------------------------
-    # Customers
-    # ------------------------------------------------------------------
-
     async def _scrape_customers(self, page):
-        conn = sqlite3.connect(self.db_path)
+        from app.db import get_conn
+        conn = get_conn()
         count = 0
         try:
             async for row in self._each_row(page, f"{PORTAL_URL}/customers", _SELECTORS["customer_rows"]):
@@ -289,7 +245,7 @@ class BlessScraper:
                 if not email:
                     continue
 
-                _upsert_customer(conn, name or email, email, phone)
+                _upsert_customer(conn, self.user_id, name or email, email, phone)
                 count += 1
             conn.commit()
         finally:
@@ -298,28 +254,27 @@ class BlessScraper:
         logger.info("Scraped %d customers", count)
         return count
 
-    # ------------------------------------------------------------------
-    # Sync log
-    # ------------------------------------------------------------------
-
     def _write_sync_log(self, results):
-        conn = sqlite3.connect(self.db_path)
+        from app.db import get_conn
+        conn = get_conn()
         try:
             synced_at = results["scraped_at"]
             for section, count in results.items():
                 if section in ("scraped_at", "status"):
                     continue
+                sync_id = binascii.b2a_hex(os.urandom(12)).decode()
                 conn.execute(
-                    "INSERT OR REPLACE INTO SyncLog (TableName, LastSyncedAt, RowsSynced) VALUES (?,?,?)",
-                    (f"bless_scrape_{section}", synced_at, count if isinstance(count, int) else -1),
+                    "INSERT INTO SyncLog (SyncLogID, UserID, TableName, LastSyncedAt, RowsSynced) "
+                    "VALUES (%s, %s, %s, %s, %s) "
+                    "ON CONFLICT (UserID, TableName) DO UPDATE SET "
+                    "LastSyncedAt = EXCLUDED.LastSyncedAt, "
+                    "RowsSynced = EXCLUDED.RowsSynced",
+                    (sync_id, self.user_id, f"bless_scrape_{section}", synced_at,
+                     count if isinstance(count, int) else -1),
                 )
             conn.commit()
         finally:
             conn.close()
-
-    # ------------------------------------------------------------------
-    # Utility
-    # ------------------------------------------------------------------
 
     @staticmethod
     async def _cell_text(row, selector):
@@ -329,105 +284,99 @@ class BlessScraper:
         return (await el.inner_text()).strip()
 
 
-# ------------------------------------------------------------------
-# DB upsert helpers (direct SQL, matching existing schema)
-# ------------------------------------------------------------------
-
 def _new_id():
     return binascii.b2a_hex(os.urandom(12)).decode()
 
 
-def _upsert_product(conn, sku, name, style, size, price):
+def _upsert_product(conn, user_id, sku, name, style, size, price):
     existing = conn.execute(
-        "SELECT ProductID FROM Products WHERE ProductSKU = ?", (sku,)
+        "SELECT ProductID FROM Products WHERE ProductSKU = %s AND UserID = %s", (sku, user_id)
     ).fetchone()
     if existing:
         conn.execute(
-            "UPDATE Products SET ProductName=?, ProductStyle=?, ProductSize=?, UnitPrice=?, InvProductName=? "
-            "WHERE ProductSKU=?",
-            (name, style or "", size or "", price or 0.0, name, sku),
+            "UPDATE Products SET ProductName=%s, ProductStyle=%s, ProductSize=%s, UnitPrice=%s, InvProductName=%s "
+            "WHERE ProductSKU=%s AND UserID=%s",
+            (name, style or "", size or "", price or 0.0, name, sku, user_id),
         )
     else:
         conn.execute(
-            "INSERT OR IGNORE INTO Products "
-            "(ProductID, ProductSKU, ProductName, ProductStyle, ProductSize, UnitPrice, InvProductName) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (_new_id(), sku, name, style or "", size or "", price or 0.0, name),
+            "INSERT INTO Products "
+            "(ProductID, UserID, ProductSKU, ProductName, ProductStyle, ProductSize, UnitPrice, InvProductName) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            (_new_id(), user_id, sku, name, style or "", size or "", price or 0.0, name),
         )
 
 
-def _upsert_inventory_snapshot(conn, product_name, quantity):
-    """Replace the current MANUAL_ADJUSTMENT snapshot for this product."""
+def _upsert_inventory_snapshot(conn, user_id, product_name, quantity):
     snapshot_order = f"BLESS_SNAPSHOT_{datetime.now(timezone.utc).strftime('%Y%m%d')}"
     existing = conn.execute(
-        "SELECT LedgerID FROM InventoryLedger WHERE ProductName=? AND EventType='MANUAL_ADJUSTMENT' AND OrderNumber=?",
-        (product_name, snapshot_order),
+        "SELECT LedgerID FROM InventoryLedger "
+        "WHERE ProductName=%s AND EventType='MANUAL_ADJUSTMENT' AND OrderNumber=%s AND UserID=%s",
+        (product_name, snapshot_order, user_id),
     ).fetchone()
     if existing:
         conn.execute(
-            "UPDATE InventoryLedger SET Delta=?, EventDate=? WHERE LedgerID=?",
-            (quantity, datetime.now(timezone.utc).isoformat(), existing[0]),
+            "UPDATE InventoryLedger SET Delta=%s, EventDate=%s WHERE LedgerID=%s",
+            (quantity, datetime.now(timezone.utc).isoformat(), existing['LedgerID']),
         )
     else:
         conn.execute(
-            "INSERT OR IGNORE INTO InventoryLedger (LedgerID, ProductName, Delta, EventType, OrderNumber, EventDate) "
-            "VALUES (?,?,?,?,?,?)",
-            (_new_id(), product_name, quantity, "MANUAL_ADJUSTMENT", snapshot_order,
+            "INSERT INTO InventoryLedger "
+            "(LedgerID, UserID, ProductName, Delta, EventType, OrderNumber, EventDate) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            (_new_id(), user_id, product_name, quantity, "MANUAL_ADJUSTMENT", snapshot_order,
              datetime.now(timezone.utc).isoformat()),
         )
 
 
-def _upsert_order(conn, order_num, email, date, total, pieces, order_type):
+def _upsert_order(conn, user_id, order_num, email, date, total, pieces, order_type):
     existing = conn.execute(
-        "SELECT OrderID FROM Orders WHERE OrderNumber=?", (order_num,)
+        "SELECT OrderID FROM Orders WHERE OrderNumber=%s AND UserID=%s", (order_num, user_id)
     ).fetchone()
     if existing:
         conn.execute(
-            "UPDATE Orders SET PaidTotal=?, PaidPieces=?, PaidDate=? WHERE OrderNumber=?",
-            (total, pieces, date, order_num),
+            "UPDATE Orders SET PaidTotal=%s, PaidPieces=%s, PaidDate=%s WHERE OrderNumber=%s AND UserID=%s",
+            (total, pieces, date, order_num, user_id),
         )
     else:
         conn.execute(
-            "INSERT OR IGNORE INTO Orders "
-            "(OrderID, OrderNumber, OrderPopUp, OrderEmail, InvoiceDate, "
+            "INSERT INTO Orders "
+            "(OrderID, UserID, OrderNumber, OrderPopUp, OrderEmail, InvoiceDate, "
             " InvSubtotal, InvTaxes, InvShipping, InvShippingTaxes, InvDiscount, "
             " InvTotal, InvPieces, PaidDate, PaidSubtotal, PaidShipping, PaidTaxes, "
             " PaidShippingTaxes, PaidDiscount, PaidTotal, PaidPieces, OrderType) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (_new_id(), order_num, "", email or "", date or "", 0, 0, 0, 0, 0,
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT DO NOTHING",
+            (_new_id(), user_id, order_num, "", email or "", date or "", 0, 0, 0, 0, 0,
              total or 0, pieces or 0, date, 0, 0, 0, 0, 0, total or 0, pieces or 0,
              order_type),
         )
 
 
-def _upsert_purchase_order(conn, po_num, date, total):
+def _upsert_purchase_order(conn, user_id, po_num, date, total):
     existing = conn.execute(
-        "SELECT OrderID FROM PurchaseOrders WHERE OrderNumber=?", (po_num,)
+        "SELECT OrderID FROM PurchaseOrders WHERE OrderNumber=%s AND UserID=%s", (po_num, user_id)
     ).fetchone()
     if not existing:
         conn.execute(
-            "INSERT OR IGNORE INTO PurchaseOrders "
-            "(OrderID, OrderNumber, OrderEmail, OrderDate, Subtotal, Shipping, Taxes, Total, Pieces) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (_new_id(), po_num, "", date or "", 0, 0, 0, total or 0, 0),
+            "INSERT INTO PurchaseOrders "
+            "(OrderID, UserID, OrderNumber, OrderEmail, OrderDate, Subtotal, Shipping, Taxes, Total, Pieces) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            (_new_id(), user_id, po_num, "", date or "", 0, 0, 0, total or 0, 0),
         )
 
 
-def _upsert_customer(conn, name, email, phone):
+def _upsert_customer(conn, user_id, name, email, phone):
     existing = conn.execute(
-        "SELECT CustomerID FROM CUSTOMERS WHERE CustomerEmail=?", (email,)
+        "SELECT CustomerID FROM CUSTOMERS WHERE CustomerEmail=%s AND UserID=%s", (email, user_id)
     ).fetchone()
     if not existing:
         conn.execute(
-            "INSERT OR IGNORE INTO CUSTOMERS (CustomerID, CustomerEmail, CustomerName, CustomerType, CustomerPhone) "
-            "VALUES (?,?,?,?,?)",
-            (_new_id(), email, name, "RETAIL", phone or None),
+            "INSERT INTO CUSTOMERS (CustomerID, UserID, CustomerEmail, CustomerName, CustomerType, CustomerPhone) "
+            "VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            (_new_id(), user_id, email, name, "RETAIL", phone or None),
         )
 
-
-# ------------------------------------------------------------------
-# Parsing helpers
-# ------------------------------------------------------------------
 
 def _parse_float(text):
     if not text:
@@ -448,14 +397,13 @@ def _parse_int(text):
         return 0
 
 
-# ------------------------------------------------------------------
-# CLI entry point for manual runs / testing
-# ------------------------------------------------------------------
-
 if __name__ == "__main__":
     import sys
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    db_path = sys.argv[1] if len(sys.argv) > 1 else "app/bless.db"
-    result = asyncio.run(BlessScraper(db_path).run())
+    user_id = sys.argv[1] if len(sys.argv) > 1 else None
+    if not user_id:
+        print("Usage: python lularoe_scraper.py <user_id>")
+        sys.exit(1)
+    result = asyncio.run(BlessScraper(user_id).run())
     print(json.dumps(result, indent=2))

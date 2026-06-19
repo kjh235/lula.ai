@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import logging
 from datetime import datetime, timezone
 
@@ -21,43 +20,43 @@ def _get_fernet():
     return Fernet(key.encode() if isinstance(key, str) else key)
 
 
-def _ensure_table(conn):
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS Credentials (
-            platform          TEXT PRIMARY KEY,
-            username          TEXT NOT NULL,
-            encrypted_password BLOB NOT NULL,
-            updated_at        TEXT NOT NULL
-        )
-    """)
-    conn.commit()
+def _get_conn():
+    from app.db import get_conn
+    return get_conn()
 
 
-def save_credentials(db_path, platform, username, password):
+def save_credentials(user_id, platform, username, password):
+    import binascii
     f = _get_fernet()
     encrypted = f.encrypt(password.encode())
-    conn = sqlite3.connect(db_path)
+    conn = _get_conn()
     try:
-        _ensure_table(conn)
+        cred_id = binascii.b2a_hex(os.urandom(12)).decode()
         conn.execute(
-            "INSERT OR REPLACE INTO Credentials "
-            "(platform, username, encrypted_password, updated_at) VALUES (?,?,?,?)",
-            (platform, username, encrypted, datetime.now(timezone.utc).isoformat()),
+            "INSERT INTO Credentials "
+            "(CredentialID, UserID, platform, username, encrypted_password, updated_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT (UserID, platform) DO UPDATE SET "
+            "username = EXCLUDED.username, "
+            "encrypted_password = EXCLUDED.encrypted_password, "
+            "updated_at = EXCLUDED.updated_at",
+            (cred_id, user_id, platform, username, encrypted,
+             datetime.now(timezone.utc).isoformat()),
         )
         conn.commit()
-        logger.info("Credentials saved for platform: %s", platform)
+        logger.info("Credentials saved for platform: %s user: %s", platform, user_id)
     finally:
         conn.close()
 
 
-def get_credentials(db_path, platform):
+def get_credentials(user_id, platform):
     """Return (username, password) tuple or None if not stored."""
-    conn = sqlite3.connect(db_path)
+    conn = _get_conn()
     try:
-        _ensure_table(conn)
         row = conn.execute(
-            "SELECT username, encrypted_password FROM Credentials WHERE platform = ?",
-            (platform,),
+            "SELECT username, encrypted_password FROM Credentials "
+            "WHERE UserID = %s AND platform = %s",
+            (user_id, platform),
         ).fetchone()
     finally:
         conn.close()
@@ -67,19 +66,24 @@ def get_credentials(db_path, platform):
 
     f = _get_fernet()
     try:
-        password = f.decrypt(row[1]).decode()
+        encrypted = row['encrypted_password']
+        if isinstance(encrypted, memoryview):
+            encrypted = bytes(encrypted)
+        password = f.decrypt(encrypted).decode()
     except InvalidToken:
         logger.error("Failed to decrypt credentials — LULA_KEY may have changed.")
         return None
 
-    return row[0], password
+    return row['username'], password
 
 
-def delete_credentials(db_path, platform):
-    conn = sqlite3.connect(db_path)
+def delete_credentials(user_id, platform):
+    conn = _get_conn()
     try:
-        _ensure_table(conn)
-        conn.execute("DELETE FROM Credentials WHERE platform = ?", (platform,))
+        conn.execute(
+            "DELETE FROM Credentials WHERE UserID = %s AND platform = %s",
+            (user_id, platform)
+        )
         conn.commit()
     finally:
         conn.close()

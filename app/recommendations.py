@@ -2,6 +2,7 @@ import math
 import os
 import pickle
 from collections import defaultdict
+from datetime import timedelta
 
 from app.db import get_conn
 from app.sizing import normalize_size, available_sizes_for_family
@@ -27,21 +28,20 @@ def _load_artifacts():
             _size_models = pickle.load(f)
 
 
-def get_customer_purchase_history(customer_id):
+def get_customer_purchase_history(user_id, customer_id):
     conn = get_conn()
-    cid = customer_id.encode() if isinstance(customer_id, str) else customer_id
     rows = conn.execute(
         "SELECT c.CustomerID, c.CustomerName, c.CustomerEmail, "
         "o.OrderNumber, o.InvoiceDate, o.PaidDate, "
         "oi.ProductName, oi.UnitPrice, oi.TotalPrice, oi.OrderLineItem, "
         "p.ProductSKU, p.ProductStyle, p.ProductSize, p.SizingFamily, p.SizeNormalized "
         "FROM Customers c "
-        "JOIN Orders o ON c.CustomerEmail = o.OrderEmail "
-        "JOIN OrderItems oi ON o.OrderNumber = oi.OrderNumber "
-        "LEFT JOIN Products p ON p.InvProductName = oi.ProductName "
-        "WHERE c.CustomerID = ? AND o.OrderType = 'RETAIL' "
+        "JOIN Orders o ON c.CustomerEmail = o.OrderEmail AND o.UserID = c.UserID "
+        "JOIN OrderItems oi ON o.OrderNumber = oi.OrderNumber AND oi.UserID = o.UserID "
+        "LEFT JOIN Products p ON p.InvProductName = oi.ProductName AND p.UserID = c.UserID "
+        "WHERE c.CustomerID = %s AND c.UserID = %s AND o.OrderType = 'RETAIL' "
         "ORDER BY o.InvoiceDate DESC",
-        (cid,)
+        (customer_id, user_id)
     ).fetchall()
     conn.close()
 
@@ -63,27 +63,23 @@ def get_customer_purchase_history(customer_id):
     return history
 
 
-def get_customer_info(customer_id):
+def get_customer_info(user_id, customer_id):
     conn = get_conn()
-    cid = customer_id.encode() if isinstance(customer_id, str) else customer_id
     row = conn.execute(
         "SELECT CustomerID, CustomerName, CustomerEmail, CustomerType "
-        "FROM Customers WHERE CustomerID = ?",
-        (cid,)
+        "FROM Customers WHERE CustomerID = %s AND UserID = %s",
+        (customer_id, user_id)
     ).fetchone()
     conn.close()
     if row:
-        info = dict(row)
-        if isinstance(info.get('CustomerID'), bytes):
-            info['CustomerID'] = info['CustomerID'].decode()
-        return info
+        return dict(row)
     return None
 
 
-def recommend_for_customer(customer_id, n=5):
+def recommend_for_customer(user_id, customer_id, n=5):
     _load_artifacts()
 
-    history = get_customer_purchase_history(customer_id)
+    history = get_customer_purchase_history(user_id, customer_id)
     if not history:
         return {'recommendations': [], 'reason': 'no_purchase_history'}
 
@@ -101,7 +97,8 @@ def recommend_for_customer(customer_id, n=5):
     product_lookup = {}
     for r in conn.execute(
         "SELECT ProductSKU, ProductName, ProductStyle, ProductSize, "
-        "UnitPrice, SizingFamily, SizeNormalized FROM Products"
+        "UnitPrice, SizingFamily, SizeNormalized FROM Products WHERE UserID = %s",
+        (user_id,)
     ).fetchall():
         product_lookup[r['ProductSKU']] = dict(r)
     conn.close()
@@ -167,33 +164,40 @@ def recommend_for_customer(customer_id, n=5):
     return {'recommendations': recommendations}
 
 
-def recommend_purchase_order(sizing_family, total_qty, days=90):
+def recommend_purchase_order(user_id, sizing_family, total_qty, days=90):
     conn = get_conn()
 
     max_date_row = conn.execute(
-        "SELECT MAX(COALESCE(PaidDate, InvoiceDate)) AS md FROM Orders"
+        "SELECT MAX(COALESCE(PaidDate, InvoiceDate)) AS md FROM Orders WHERE UserID = %s",
+        (user_id,)
     ).fetchone()
     max_date = max_date_row['md'] if max_date_row else None
     if not max_date:
         conn.close()
         return {'sizes': [], 'active_customers': 0, 'days': days, 'family': sizing_family}
 
+    if hasattr(max_date, 'date'):
+        cutoff = max_date - timedelta(days=days)
+    else:
+        from datetime import datetime
+        cutoff = datetime.fromisoformat(str(max_date)) - timedelta(days=days)
+
     rows = conn.execute(
         "SELECT o.OrderEmail, p.SizeNormalized, "
         "MAX(COALESCE(o.PaidDate, o.InvoiceDate)) AS latest "
         "FROM Orders o "
-        "JOIN OrderItems oi ON o.OrderNumber = oi.OrderNumber "
-        "JOIN Products p ON p.InvProductName = oi.ProductName "
+        "JOIN OrderItems oi ON o.OrderNumber = oi.OrderNumber AND oi.UserID = o.UserID "
+        "JOIN Products p ON p.InvProductName = oi.ProductName AND p.UserID = o.UserID "
         "WHERE o.OrderType = 'RETAIL' "
-        "AND p.SizingFamily = ? "
-        "AND COALESCE(o.PaidDate, o.InvoiceDate) >= date(?, '-' || ? || ' days') "
+        "AND o.UserID = %s "
+        "AND p.SizingFamily = %s "
+        "AND COALESCE(o.PaidDate, o.InvoiceDate) >= %s "
         "GROUP BY o.OrderEmail, p.SizeNormalized "
         "ORDER BY latest DESC",
-        (sizing_family, max_date, str(days))
+        (user_id, sizing_family, cutoff)
     ).fetchall()
     conn.close()
 
-    # Take each customer's most recent size purchase only
     customer_size = {}
     for r in rows:
         email = r['OrderEmail']
@@ -209,7 +213,6 @@ def recommend_purchase_order(sizing_family, total_qty, days=90):
         return {'sizes': [], 'active_customers': 0, 'days': days, 'family': sizing_family}
 
     ordered_sizes = available_sizes_for_family(sizing_family)
-    size_order = {token: ordinal for ordinal, token in ordered_sizes}
 
     results = []
     for ordinal, token in ordered_sizes:
@@ -224,7 +227,6 @@ def recommend_purchase_order(sizing_family, total_qty, days=90):
             'qty': math.floor(raw_qty),
         })
 
-    # Largest-remainder rounding so quantities sum to total_qty
     allocated = sum(r['qty'] for r in results)
     remainder = total_qty - allocated
     by_fraction = sorted(
@@ -238,7 +240,7 @@ def recommend_purchase_order(sizing_family, total_qty, days=90):
         if results[i]['customers'] > 0:
             results[i]['qty'] += 1
             remainder -= 1
-    # If still short (more units than customers), distribute to top sizes
+
     if remainder > 0:
         by_customers = sorted(
             range(len(results)),
