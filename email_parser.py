@@ -13,7 +13,7 @@ def remove_patterns(input_text, patterns_to_remove):
         input_text = re.sub(pattern, '', input_text)
     return input_text.strip()
 
-patterns_to_remove = [r'\=20',r'\=09',r'\=E2',r'\=80',r'\=94',r'\=3D09',r'\=3D99',r'\=3DE2',r'\=3D80',r'\=3D20',r'\=3D',r'\=',r'\\n',r'\\r',r'\\t',r'\'\'',r'\'',r'\"',r'\<[^>]*>',r'\?utf-8\?Q\?']
+patterns_to_remove = [r'\=20',r'\=09',r'\=E2',r'\=80',r'\=94',r'\=3D09',r'\=3D99',r'\=3DE2',r'\=3D80',r'\=3D20',r'\=3D',r'\=',r'\?utf-8\?Q\?']
 
 invoice_link = r'<a href="(.*?)"(.*?)\s+Pay Invoice'
 
@@ -23,7 +23,7 @@ def message_parse(x, patterns_to_remove):
     parsed_text = []
     for string in soup.stripped_strings:
         if len(string) > 0:
-            parsed_text.append(remove_patterns(repr(string), patterns_to_remove))
+            parsed_text.append(remove_patterns(string, patterns_to_remove))
     while ("" in parsed_text):
         parsed_text.remove("")
     return parsed_text
