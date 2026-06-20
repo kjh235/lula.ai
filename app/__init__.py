@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s: %(messag
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-prod')
 
 import data_management
 data_management.init_db()
