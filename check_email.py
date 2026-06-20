@@ -55,7 +55,7 @@ def purchaseOrders(creds, search_query, user_id):
                     data_management.insert_purchase_order_item(conn, user_id, items, summary[0])
                 data_management.apply_purchase_order_to_inventory(conn, user_id, summary[0])
             except Exception:
-                logger.error("failed to process message %s", msg_id)
+                logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
@@ -71,7 +71,7 @@ def retailInvoices(creds, search_query, user_id):
             data_management.insert_order(conn, user_id, summary, numberOfItems)
             data_management.update_order_type(conn, user_id, summary[3], "RETAIL")
         except Exception:
-            logger.error("failed to process message %s", msg_id)
+            logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
@@ -88,7 +88,7 @@ def retailPaid(creds, search_query, user_id):
                 data_management.insert_order_item(conn, user_id, items, summary[3])
             data_management.apply_order_to_inventory(conn, user_id, summary[3])
         except Exception:
-            logger.error("failed to process message %s", msg_id)
+            logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
@@ -109,7 +109,7 @@ def transferInvoices(creds, search_query, user_id):
             else:
                 data_management.update_order_type(conn, user_id, summary[3], "TRANSFER_OUT")
         except Exception:
-            logger.error("failed to process message %s", msg_id)
+            logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
@@ -129,7 +129,7 @@ def transferPaid(creds, search_query, user_id):
             data_management.upsert_products_from_transfer_in(conn, user_id, summary[3])
             data_management.apply_order_to_inventory(conn, user_id, summary[3])
         except Exception:
-            logger.error("failed to process message %s", msg_id)
+            logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
