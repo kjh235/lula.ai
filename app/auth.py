@@ -1,16 +1,20 @@
-import base64
 import binascii
-import hashlib
 import logging
 import os
+import secrets
 from functools import wraps
+from urllib.parse import urlencode
 
 from flask import Blueprint, redirect, url_for, session, request
-from google_auth_oauthlib.flow import Flow
+import requests as req
 
 logger = logging.getLogger(__name__)
 
 auth = Blueprint('auth', __name__)
+
+_AUTH_URI = 'https://accounts.google.com/o/oauth2/auth'
+_TOKEN_URI = 'https://oauth2.googleapis.com/token'
+_USERINFO_URI = 'https://www.googleapis.com/oauth2/v3/userinfo'
 
 SCOPES = [
     'openid',
@@ -20,70 +24,54 @@ SCOPES = [
 ]
 
 
-def _flow():
-    return Flow.from_client_config(
-        {
-            "web": {
-                "client_id": os.environ['GOOGLE_CLIENT_ID'],
-                "client_secret": os.environ['GOOGLE_CLIENT_SECRET'],
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [os.environ['OAUTH_REDIRECT_URI']],
-            }
-        },
-        scopes=SCOPES,
-        redirect_uri=os.environ['OAUTH_REDIRECT_URI'],
-    )
-
-
-def _pkce_pair():
-    verifier = base64.urlsafe_b64encode(os.urandom(40)).rstrip(b'=').decode()
-    challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(verifier.encode()).digest()
-    ).rstrip(b'=').decode()
-    return verifier, challenge
-
-
 @auth.route('/login')
 def login():
-    flow = _flow()
-    code_verifier, code_challenge = _pkce_pair()
-    auth_url, state = flow.authorization_url(
-        access_type='offline',
-        prompt='consent',
-        code_challenge=code_challenge,
-        code_challenge_method='S256',
-    )
+    state = secrets.token_urlsafe(32)
     session['oauth_state'] = state
-    session['oauth_code_verifier'] = code_verifier
-    return redirect(auth_url)
+    params = {
+        'client_id': os.environ['GOOGLE_CLIENT_ID'],
+        'redirect_uri': os.environ['OAUTH_REDIRECT_URI'],
+        'response_type': 'code',
+        'scope': ' '.join(SCOPES),
+        'state': state,
+        'access_type': 'offline',
+        'prompt': 'consent',
+    }
+    return redirect(f'{_AUTH_URI}?{urlencode(params)}')
 
 
 @auth.route('/oauth/callback')
 def oauth_callback():
     import data_management
     from app.db import get_conn
-    import requests as req
+
+    state = request.args.get('state')
+    if state != session.pop('oauth_state', None):
+        return 'State mismatch — please try logging in again.', 400
 
     code = request.args.get('code')
-    code_verifier = session.pop('oauth_code_verifier', None)
+    token_resp = req.post(_TOKEN_URI, data={
+        'code': code,
+        'client_id': os.environ['GOOGLE_CLIENT_ID'],
+        'client_secret': os.environ['GOOGLE_CLIENT_SECRET'],
+        'redirect_uri': os.environ['OAUTH_REDIRECT_URI'],
+        'grant_type': 'authorization_code',
+    })
+    token_data = token_resp.json()
+    access_token = token_data.get('access_token')
+    refresh_token = token_data.get('refresh_token')
 
-    flow = _flow()
-    flow.fetch_token(
-        code=code,
-        code_verifier=code_verifier,
-    )
-    credentials = flow.credentials
+    if not access_token:
+        logger.error('Token exchange failed: %s', token_data)
+        return f'Token exchange failed: {token_data.get("error_description", token_data)}', 500
 
-    user_info_resp = req.get(
-        'https://www.googleapis.com/oauth2/v3/userinfo',
-        headers={'Authorization': f'Bearer {credentials.token}'},
-    )
-    user_info = user_info_resp.json()
+    user_info = req.get(
+        _USERINFO_URI,
+        headers={'Authorization': f'Bearer {access_token}'},
+    ).json()
 
     email = user_info.get('email', '')
     name = user_info.get('name', email)
-    refresh_token = credentials.refresh_token
 
     conn = get_conn()
     try:
