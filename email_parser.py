@@ -292,6 +292,9 @@ def purchase_order_parse(k, recipient_email):
         if rows[0] != '99':
             qty_sum += float(rows[1])
             size = re.search(ptn, rows[3])
+            if size is None:
+                logger.warning("purchase_order_parse: could not parse size from %r, skipping row", rows[3])
+                continue
             sku_list.append([rows[2], rows[3], rows[5], size[1], size[2]])
     summary_header = ["order number", "email", "date", "subtotal", "shipping", "taxes", "total", "item_qty"]
     order_summary = [k[PRICE_INDEX + 1], recipient_email, k[SHOPPING_CART_INDEX + 1],
