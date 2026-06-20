@@ -4,8 +4,8 @@ import psycopg2.extras
 
 
 class _Row(dict):
-    """Dict with case-insensitive string key access and integer positional access,
-    so row['GoogleRefreshToken'] and row[0] both work despite PostgreSQL lowercasing."""
+    """Behaves like sqlite3.Row: name access (case-insensitive), integer index
+    access, and iteration/unpacking over column *values* in order."""
     def __init__(self, mapping):
         super().__init__(mapping)
         self._vals = list(mapping.values())
@@ -25,6 +25,12 @@ class _Row(dict):
         if isinstance(key, int):
             return 0 <= key < len(self._vals)
         return super().__contains__(key.lower())
+
+    def __iter__(self):
+        return iter(self._vals)
+
+    def __len__(self):
+        return len(self._vals)
 
 
 class _CiCursor(psycopg2.extras.RealDictCursor):
