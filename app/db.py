@@ -4,16 +4,27 @@ import psycopg2.extras
 
 
 class _Row(dict):
-    """Dict with case-insensitive key access so row['GoogleRefreshToken'] works
-    even though PostgreSQL returns the column name lowercased."""
+    """Dict with case-insensitive string key access and integer positional access,
+    so row['GoogleRefreshToken'] and row[0] both work despite PostgreSQL lowercasing."""
+    def __init__(self, mapping):
+        super().__init__(mapping)
+        self._vals = list(mapping.values())
+
     def __getitem__(self, key):
-        return super().__getitem__(key.lower() if isinstance(key, str) else key)
+        if isinstance(key, int):
+            return self._vals[key]
+        return super().__getitem__(key.lower())
 
     def get(self, key, default=None):
-        return super().get(key.lower() if isinstance(key, str) else key, default)
+        try:
+            return self[key]
+        except (KeyError, IndexError):
+            return default
 
     def __contains__(self, key):
-        return super().__contains__(key.lower() if isinstance(key, str) else key)
+        if isinstance(key, int):
+            return 0 <= key < len(self._vals)
+        return super().__contains__(key.lower())
 
 
 class _CiCursor(psycopg2.extras.RealDictCursor):
