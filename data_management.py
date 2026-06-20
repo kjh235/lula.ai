@@ -13,6 +13,15 @@ def _parse_money(value):
     return value.lstrip("$").replace(',', '')
 
 
+def _parse_datetime(value, formats):
+    for fmt in formats:
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"time data {value!r} does not match any known format")
+
+
 def _ensure_column(cursor, table, column, col_type):
     cursor.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}")
 
@@ -354,10 +363,7 @@ def insert_purchase_order(dbconn, user_id, purchase_order_rec):
     cursor = dbconn.cursor()
     OrderNumber = purchase_order_rec[0]
     OrderEmail = purchase_order_rec[1]
-    try:
-        OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S %p")
-    except ValueError:
-        OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S")
+    OrderDate = _parse_datetime(purchase_order_rec[2], ["%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %I:%M:%S"])
     Subtotal = _parse_money(purchase_order_rec[3])
     Shipping = _parse_money(purchase_order_rec[4])
     Taxes = _parse_money(purchase_order_rec[5])
@@ -416,10 +422,7 @@ def insert_order(dbconn, user_id, retail_inv_rec, count_items):
     OrderPopup = retail_inv_rec[4]
     OrderEmail = retail_inv_rec[1]
     d_date = retail_inv_rec[2].replace(' PST', '')
-    try:
-        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
-    except ValueError:
-        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
+    InvDate = _parse_datetime(d_date, ["%b %d %Y %I:%M %p", "%b %d %Y %I:%M"])
     InvSubtotal = _parse_money(retail_inv_rec[5])
     InvShipping = _parse_money(retail_inv_rec[7])
     InvTaxes = _parse_money(retail_inv_rec[6])
@@ -454,11 +457,7 @@ def insert_order(dbconn, user_id, retail_inv_rec, count_items):
 def update_paid_order(conn, user_id, summary, numberOfItems, emailTime):
     cursor = conn.cursor()
     d_date = summary[2].replace(' PST', '')
-    PaidDate = emailTime
-    try:
-        PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
-    except ValueError:
-        PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
+    PaidDate = _parse_datetime(d_date, ["%b %d %Y %I:%M %p", "%b %d %Y %I:%M"])
     PaidSubtotal = _parse_money(summary[5])
     PaidShipping = _parse_money(summary[7])
     PaidTaxes = _parse_money(summary[6])
