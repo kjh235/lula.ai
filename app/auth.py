@@ -44,6 +44,7 @@ def login():
         prompt='consent',
     )
     session['oauth_state'] = state
+    session['oauth_code_verifier'] = flow.code_verifier
     return redirect(auth_url)
 
 
@@ -54,7 +55,12 @@ def oauth_callback():
     import requests as req
 
     flow = _flow()
-    flow.fetch_token(authorization_response=request.url)
+    flow.code_verifier = session.pop('oauth_code_verifier', None)
+
+    callback_url = request.url
+    if callback_url.startswith('http://') and request.headers.get('X-Forwarded-Proto') == 'https':
+        callback_url = 'https://' + callback_url[len('http://'):]
+    flow.fetch_token(authorization_response=callback_url)
     credentials = flow.credentials
 
     user_info_resp = req.get(
