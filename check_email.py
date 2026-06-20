@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def _fetch_gmail_messages(creds, search_query):
-    service = build('gmail', 'v1', credentials=creds)
+    service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
     result = service.users().messages().list(maxResults=500, userId='me', q=search_query).execute()
     messages = result.get('messages')
     if not messages:
@@ -55,7 +55,7 @@ def purchaseOrders(creds, search_query, user_id):
                     data_management.insert_purchase_order_item(conn, user_id, items, summary[0])
                 data_management.apply_purchase_order_to_inventory(conn, user_id, summary[0])
             except Exception:
-                logger.error("failed to process message %s", msg_id)
+                logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
@@ -71,7 +71,7 @@ def retailInvoices(creds, search_query, user_id):
             data_management.insert_order(conn, user_id, summary, numberOfItems)
             data_management.update_order_type(conn, user_id, summary[3], "RETAIL")
         except Exception:
-            logger.error("failed to process message %s", msg_id)
+            logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
@@ -88,14 +88,14 @@ def retailPaid(creds, search_query, user_id):
                 data_management.insert_order_item(conn, user_id, items, summary[3])
             data_management.apply_order_to_inventory(conn, user_id, summary[3])
         except Exception:
-            logger.error("failed to process message %s", msg_id)
+            logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
 
 def transferInvoices(creds, search_query, user_id):
     from app.db import get_conn
-    service = build('gmail', 'v1', credentials=creds)
+    service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
     my_email = service.users().getProfile(userId='me').execute()['emailAddress']
     for msg_id, decoded_data, _, _ in _fetch_gmail_messages(creds, search_query):
         conn = get_conn()
@@ -109,14 +109,14 @@ def transferInvoices(creds, search_query, user_id):
             else:
                 data_management.update_order_type(conn, user_id, summary[3], "TRANSFER_OUT")
         except Exception:
-            logger.error("failed to process message %s", msg_id)
+            logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
 
 def transferPaid(creds, search_query, user_id):
     from app.db import get_conn
-    service = build('gmail', 'v1', credentials=creds)
+    service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
     my_email = service.users().getProfile(userId='me').execute()['emailAddress']
     for msg_id, decoded_data, email_time, _ in _fetch_gmail_messages(creds, search_query):
         conn = get_conn()
@@ -129,7 +129,7 @@ def transferPaid(creds, search_query, user_id):
             data_management.upsert_products_from_transfer_in(conn, user_id, summary[3])
             data_management.apply_order_to_inventory(conn, user_id, summary[3])
         except Exception:
-            logger.error("failed to process message %s", msg_id)
+            logger.error("failed to process message %s", msg_id, exc_info=True)
         finally:
             conn.close()
 
