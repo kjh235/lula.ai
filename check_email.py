@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def _fetch_gmail_messages(creds, search_query):
-    service = build('gmail', 'v1', credentials=creds)
+    service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
     result = service.users().messages().list(maxResults=500, userId='me', q=search_query).execute()
     messages = result.get('messages')
     if not messages:
@@ -95,7 +95,7 @@ def retailPaid(creds, search_query, user_id):
 
 def transferInvoices(creds, search_query, user_id):
     from app.db import get_conn
-    service = build('gmail', 'v1', credentials=creds)
+    service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
     my_email = service.users().getProfile(userId='me').execute()['emailAddress']
     for msg_id, decoded_data, _, _ in _fetch_gmail_messages(creds, search_query):
         conn = get_conn()
@@ -116,7 +116,7 @@ def transferInvoices(creds, search_query, user_id):
 
 def transferPaid(creds, search_query, user_id):
     from app.db import get_conn
-    service = build('gmail', 'v1', credentials=creds)
+    service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
     my_email = service.users().getProfile(userId='me').execute()['emailAddress']
     for msg_id, decoded_data, email_time, _ in _fetch_gmail_messages(creds, search_query):
         conn = get_conn()
