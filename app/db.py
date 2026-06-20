@@ -21,6 +21,9 @@ class _Row(dict):
         except (KeyError, IndexError):
             return default
 
+    def __setitem__(self, key, value):
+        super().__setitem__(key.lower() if isinstance(key, str) else key, value)
+
     def __contains__(self, key):
         if isinstance(key, int):
             return 0 <= key < len(self._vals)

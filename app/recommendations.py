@@ -72,7 +72,7 @@ def get_customer_info(user_id, customer_id):
     ).fetchone()
     conn.close()
     if row:
-        return dict(row)
+        return row
     return None
 
 
@@ -100,7 +100,7 @@ def recommend_for_customer(user_id, customer_id, n=5):
         "UnitPrice, SizingFamily, SizeNormalized FROM Products WHERE UserID = %s",
         (user_id,)
     ).fetchall():
-        product_lookup[r['ProductSKU']] = dict(r)
+        product_lookup[r['ProductSKU']] = r
     conn.close()
 
     candidate_scores = defaultdict(float)
