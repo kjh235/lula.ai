@@ -1,10 +1,11 @@
-import os
+import base64
 import binascii
+import hashlib
 import logging
+import os
 from functools import wraps
 
-from flask import Blueprint, redirect, url_for, session, request, current_app
-from google.oauth2.credentials import Credentials
+from flask import Blueprint, redirect, url_for, session, request
 from google_auth_oauthlib.flow import Flow
 
 logger = logging.getLogger(__name__)
@@ -35,16 +36,26 @@ def _flow():
     )
 
 
+def _pkce_pair():
+    verifier = base64.urlsafe_b64encode(os.urandom(40)).rstrip(b'=').decode()
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b'=').decode()
+    return verifier, challenge
+
+
 @auth.route('/login')
 def login():
     flow = _flow()
+    code_verifier, code_challenge = _pkce_pair()
     auth_url, state = flow.authorization_url(
         access_type='offline',
-        include_granted_scopes='true',
         prompt='consent',
+        code_challenge=code_challenge,
+        code_challenge_method='S256',
     )
     session['oauth_state'] = state
-    session['oauth_code_verifier'] = flow.code_verifier
+    session['oauth_code_verifier'] = code_verifier
     return redirect(auth_url)
 
 
@@ -54,13 +65,14 @@ def oauth_callback():
     from app.db import get_conn
     import requests as req
 
-    flow = _flow()
-    flow.code_verifier = session.pop('oauth_code_verifier', None)
+    code = request.args.get('code')
+    code_verifier = session.pop('oauth_code_verifier', None)
 
-    callback_url = request.url
-    if callback_url.startswith('http://') and request.headers.get('X-Forwarded-Proto') == 'https':
-        callback_url = 'https://' + callback_url[len('http://'):]
-    flow.fetch_token(authorization_response=callback_url)
+    flow = _flow()
+    flow.fetch_token(
+        code=code,
+        code_verifier=code_verifier,
+    )
     credentials = flow.credentials
 
     user_info_resp = req.get(
