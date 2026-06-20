@@ -1,7 +1,6 @@
 import binascii
 import logging
 import os
-import secrets
 from functools import wraps
 from urllib.parse import urlencode
 
@@ -26,14 +25,11 @@ SCOPES = [
 
 @auth.route('/login')
 def login():
-    state = secrets.token_urlsafe(32)
-    session['oauth_state'] = state
     params = {
         'client_id': os.environ['GOOGLE_CLIENT_ID'],
         'redirect_uri': os.environ['OAUTH_REDIRECT_URI'],
         'response_type': 'code',
         'scope': ' '.join(SCOPES),
-        'state': state,
         'access_type': 'offline',
         'prompt': 'consent',
     }
@@ -44,10 +40,6 @@ def login():
 def oauth_callback():
     import data_management
     from app.db import get_conn
-
-    state = request.args.get('state')
-    if state != session.pop('oauth_state', None):
-        return 'State mismatch — please try logging in again.', 400
 
     code = request.args.get('code')
     token_resp = req.post(_TOKEN_URI, data={
