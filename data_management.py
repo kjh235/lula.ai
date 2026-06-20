@@ -230,6 +230,27 @@ def init_db(database_url=None):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fitfb_customer ON FitFeedback(CustomerID)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fitfb_sku ON FitFeedback(ProductSKU)")
 
+    cursor.execute("""
+        DELETE FROM PurchaseOrderItems
+        WHERE PurchaseItemID NOT IN (
+            SELECT MIN(PurchaseItemID)
+            FROM PurchaseOrderItems
+            GROUP BY UserID, OrderNumber, ProductSKU
+        )
+    """)
+
+    cursor.execute("""
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'purchaseorderitems'::regclass
+          AND conname = 'uq_purchaseorderitems_user_order_sku'
+    """)
+    if cursor.fetchone() is None:
+        cursor.execute("""
+            ALTER TABLE PurchaseOrderItems
+            ADD CONSTRAINT uq_purchaseorderitems_user_order_sku
+            UNIQUE (UserID, OrderNumber, ProductSKU)
+        """)
+
     conn.commit()
 
     from app.sizing import classify_family, normalize_size as _normalize_size, classify_product_family
@@ -404,11 +425,20 @@ def insert_purchase_order_item(dbconn, user_id, purchasedItemsRec, purchaseOrder
     LlrPieces = purchasedItemsRec[4]
     try:
         cursor.execute(
-            "INSERT INTO PurchaseOrderItems (PurchaseItemID, UserID, OrderNumber, ProductSKU, ProductName, Quantity, CostPerUnit, TotalCost, LlrPieces) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (UUID, user_id, OrderNumber, ProductSKU, ProductName, Quantity, CostPerUnit, TotalCost, LlrPieces)
+            "SELECT PurchaseItemID FROM PurchaseOrderItems "
+            "WHERE UserID = %s AND OrderNumber = %s AND ProductSKU = %s",
+            (user_id, OrderNumber, ProductSKU)
         )
-        dbconn.commit()
+        row = cursor.fetchone()
+
+        if row is None:
+            cursor.execute(
+                "INSERT INTO PurchaseOrderItems "
+                "(PurchaseItemID, UserID, OrderNumber, ProductSKU, ProductName, Quantity, CostPerUnit, TotalCost, LlrPieces) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (UUID, user_id, OrderNumber, ProductSKU, ProductName, Quantity, CostPerUnit, TotalCost, LlrPieces)
+            )
+            dbconn.commit()
         logger.debug("PO item saved")
     except Exception as e:
         logger.error("PO item failed to save: %s", e)
