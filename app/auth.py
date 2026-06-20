@@ -44,6 +44,7 @@ def login():
         prompt='consent',
     )
     session['oauth_state'] = state
+    session['oauth_code_verifier'] = flow.code_verifier
     return redirect(auth_url)
 
 
@@ -54,7 +55,8 @@ def oauth_callback():
     import requests as req
 
     flow = _flow()
-    # Behind Railway's HTTPS proxy, request.url is http:// — force https://
+    flow.code_verifier = session.pop('oauth_code_verifier', None)
+
     callback_url = request.url
     if callback_url.startswith('http://') and request.headers.get('X-Forwarded-Proto') == 'https':
         callback_url = 'https://' + callback_url[len('http://'):]
