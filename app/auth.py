@@ -54,7 +54,11 @@ def oauth_callback():
     import requests as req
 
     flow = _flow()
-    flow.fetch_token(authorization_response=request.url)
+    # Behind Railway's HTTPS proxy, request.url is http:// — force https://
+    callback_url = request.url
+    if callback_url.startswith('http://') and request.headers.get('X-Forwarded-Proto') == 'https':
+        callback_url = 'https://' + callback_url[len('http://'):]
+    flow.fetch_token(authorization_response=callback_url)
     credentials = flow.credentials
 
     user_info_resp = req.get(
