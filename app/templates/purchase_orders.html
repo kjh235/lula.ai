@@ -48,7 +48,7 @@
                     {% for po in po_list %}
                     <tr style="cursor:pointer;" onclick="window.location='/purchase-orders/{{ po.OrderNumber }}'">
                         <td><strong>{{ po.OrderNumber }}</strong></td>
-                        <td>{{ po.OrderDate[:10] if po.OrderDate else '—' }}</td>
+                        <td>{{ po.OrderDate }}</td>
                         <td>{{ po.TotalUnitsOrdered }}</td>
                         <td>{{ po.TotalUnitsSoldCapped }}</td>
                         <td>
