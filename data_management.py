@@ -87,9 +87,7 @@ def init_db(database_url=None):
         Quantity INTEGER,
         CostPerUnit REAL,
         TotalCost REAL,
-        LlrPieces REAL,
-        FOREIGN KEY (OrderNumber) REFERENCES PurchaseOrders(OrderNumber),
-        FOREIGN KEY (ProductSKU) REFERENCES Products(ProductSKU)
+        LlrPieces REAL
     )
     ''')
 
@@ -136,8 +134,6 @@ def init_db(database_url=None):
         UnitPrice REAL,
         DiscountPrice REAL,
         TotalPrice REAL,
-        FOREIGN KEY (OrderNumber) REFERENCES Orders(OrderNumber),
-        FOREIGN KEY (ProductName) REFERENCES Products(ProductName),
         UNIQUE (UserID, OrderNumber, OrderLineItem)
     )
     ''')
@@ -158,7 +154,6 @@ def init_db(database_url=None):
                     )),
         OrderNumber TEXT,
         EventDate   TIMESTAMP NOT NULL,
-        FOREIGN KEY (ProductName) REFERENCES Products(ProductName),
         UNIQUE (UserID, OrderNumber, ProductName)
     )
     ''')
