@@ -254,37 +254,30 @@ def paid_parse(k, recipient_email, is_transfer=False):
 retail_paid_parse = lambda k, email: paid_parse(k, email, is_transfer=False)
 transfer_paid_parse = lambda k, email: paid_parse(k, email, is_transfer=True)
 
+def _lookup_po_field_indices(k):
+    return {
+        'BIN': get_index("Bin", k),
+        'SUBTOTAL': get_index("Subtotal:", k),
+        'SHIPPING': get_index("Shipping:", k),
+        'TAXES': get_index("Taxes:", k),
+        'TOTAL': get_index("Total:", k),
+        'AMOUNT_PAID': get_index("Amount Paid:", k),
+        'PRICE': get_index("Price:", k),
+        'SHOPPING_CART': get_index("Shopping Cart", k),
+    }
+
+
 def purchase_order_parse(k, recipient_email):
-    BIN = "Bin"
-    BIN_INDEX = k.index(BIN)
-    SUBTOTAL = "Subtotal:"
-    SUBTOTAL_INDEX = k.index(SUBTOTAL)
-    SHIPPING = "Shipping:"
-    SHIPPING_INDEX = k.index(SHIPPING)
-    TAXES = "Taxes:"
-    TAXES_INDEX = k.index(TAXES)
-    TOTAL = "Total:"
-    TOTAL_INDEX = k.index(TOTAL)
-    AMOUNT_PAID = "Amount Paid:"
-    AMOUNT_PAID_INDEX = k.index(AMOUNT_PAID)
-    PRICE = "Price:"
-    PRICE_INDEX = k.index(PRICE)
-    SHOPPING_CART = "Shopping Cart"
-    SHOPPING_CART_INDEX = k.index(SHOPPING_CART)
-    NUM_OF_SKUS = int((SUBTOTAL_INDEX - BIN_INDEX) / 7) - 1
+    idx = _lookup_po_field_indices(k)
     ORDER_ITEM_COL = 7
+    num_of_skus = int((idx['SUBTOTAL'] - idx['BIN']) / ORDER_ITEM_COL) - 1
     order_items = []
-    j = 0
-    while j < (NUM_OF_SKUS):
-        i = 0
+    for j in range(num_of_skus):
         items = []
-        while i < (ORDER_ITEM_COL):
-            m = int(BIN_INDEX + (i + (j * ORDER_ITEM_COL)))
-            items.append(k[m].replace("T/C 2","T/C2"))
-            i += 1
+        for i in range(ORDER_ITEM_COL):
+            m = int(idx['BIN'] + (i + (j * ORDER_ITEM_COL)))
+            items.append(k[m].replace("T/C 2", "T/C2"))
         order_items.append(items)
-        j += 1
-    order_summary = []
     sku_list = []
     qty_sum = 0
     ptn = r'(.*)\s([A-z0-9]+[\/]?[A-z0-9]*)$'
@@ -292,10 +285,12 @@ def purchase_order_parse(k, recipient_email):
         if rows[0] != '99':
             qty_sum += float(rows[1])
             size = re.search(ptn, rows[3])
+            if size is None:
+                logger.warning("purchase_order_parse: could not parse size from %r, skipping row", rows[3])
+                continue
             sku_list.append([rows[2], rows[3], rows[5], size[1], size[2]])
-    summary_header = ["order number", "email", "date", "subtotal", "shipping", "taxes", "total", "item_qty"]
-    order_summary = [k[PRICE_INDEX + 1], recipient_email, k[SHOPPING_CART_INDEX + 1],
-                     k[SUBTOTAL_INDEX + 1], k[SHIPPING_INDEX + 1],
-                     k[TAXES_INDEX + 1], k[TOTAL_INDEX + 1], qty_sum]
+    order_summary = [k[idx['PRICE'] + 1], recipient_email, k[idx['SHOPPING_CART'] + 1],
+                     k[idx['SUBTOTAL'] + 1], k[idx['SHIPPING'] + 1],
+                     k[idx['TAXES'] + 1], k[idx['TOTAL'] + 1], qty_sum]
     sku_list = translate_productName_to_invoiceName(sku_list)
     return order_summary, order_items, sku_list
