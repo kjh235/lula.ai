@@ -39,7 +39,7 @@ def load_products(conn):
         "UnitPrice, InvProductName, SizingFamily, SizeNormalized FROM Products"
     )
     rows = cur.fetchall()
-    return [dict(r) for r in rows]
+    return [r for r in rows]
 
 
 def load_order_items(conn):
@@ -50,7 +50,7 @@ def load_order_items(conn):
         "LEFT JOIN Products p ON p.InvProductName = oi.ProductName AND p.UserID = oi.UserID"
     )
     rows = cur.fetchall()
-    return [dict(r) for r in rows]
+    return [r for r in rows]
 
 
 def load_fit_feedback(conn):

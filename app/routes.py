@@ -54,14 +54,14 @@ def dashboard():
     mtd_revenue = mtd_row['rev'] if mtd_row else 0
     mtd_pieces = int(mtd_row['pcs']) if mtd_row else 0
 
-    recent_orders = [dict(r) for r in conn.execute(
+    recent_orders = [r for r in conn.execute(
         "SELECT OrderNumber, OrderEmail, PaidDate, PaidTotal, PaidPieces "
         "FROM Orders WHERE OrderType = 'RETAIL' AND PaidDate IS NOT NULL AND UserID = %s "
         "ORDER BY PaidDate DESC LIMIT 10",
         (user_id,)
     ).fetchall()]
 
-    top_customers = [dict(r) for r in conn.execute(
+    top_customers = [r for r in conn.execute(
         "SELECT c.CustomerID, c.CustomerName, "
         "COALESCE(SUM(o.PaidTotal), 0) AS LTV, "
         "COUNT(o.OrderNumber) AS OrderCount "
@@ -107,7 +107,7 @@ def customers():
         (user_id,)
     ).fetchall()
     conn.close()
-    return render_template('customers.html', customers=[dict(r) for r in rows])
+    return render_template('customers.html', customers=[r for r in rows])
 
 
 @app.route("/customers/<customer_id>")
@@ -132,7 +132,7 @@ def customer_detail(customer_id):
         (customer['CustomerEmail'], user_id)
     ).fetchone()
 
-    recent_orders = [dict(r) for r in conn.execute(
+    recent_orders = [r for r in conn.execute(
         "SELECT OrderNumber, InvoiceDate, PaidDate, PaidTotal, PaidPieces "
         "FROM Orders WHERE OrderEmail = %s AND OrderType = 'RETAIL' AND UserID = %s "
         "ORDER BY COALESCE(PaidDate, InvoiceDate) DESC LIMIT 5",
@@ -173,14 +173,14 @@ def inventory():
     ).fetchall()
     products = []
     for r in raw:
-        p = dict(r)
+        p = r
         price = p['UnitPrice']
         if isinstance(price, str):
             price = float(price.replace('$', '').replace(',', '') or 0)
         p['UnitPrice'] = float(price or 0)
         products.append(p)
 
-    style_counts = [dict(r) for r in conn.execute(
+    style_counts = [r for r in conn.execute(
         "SELECT ProductStyle, COUNT(*) AS cnt FROM Products WHERE UserID = %s "
         "GROUP BY ProductStyle ORDER BY cnt DESC",
         (user_id,)
@@ -204,7 +204,7 @@ def inventory():
 def orders():
     user_id = session['user_id']
     conn = get_conn()
-    all_orders = [dict(r) for r in conn.execute(
+    all_orders = [r for r in conn.execute(
         "SELECT o.OrderNumber, o.OrderEmail, o.OrderType, o.InvoiceDate, "
         "o.PaidDate, o.InvTotal, o.PaidTotal, o.InvPieces, o.PaidPieces, "
         "c.CustomerName "
@@ -294,7 +294,7 @@ def purchase_orders():
 
     po_list = []
     for r in rows:
-        d = dict(r)
+        d = r
         ordered = d['TotalUnitsOrdered'] or 0
         sold = min(d['TotalUnitsSold'] or 0, ordered)
         cost = float(d['TotalCost'] or 0)
@@ -337,7 +337,7 @@ def purchase_order_detail(order_number):
         return "Purchase order not found", 404
     po = dict(po)
 
-    items = [dict(r) for r in conn.execute(
+    items = [r for r in conn.execute(
         "WITH " + _MATCHED_SALES_SQL +
         "SELECT "
         "  poi.ProductSKU, poi.ProductName AS POProductName, "
@@ -475,7 +475,7 @@ def sync_status():
             (user_id,)
         ).fetchall()
         conn.close()
-        return jsonify({"tables": [dict(r) for r in rows]})
+        return jsonify({"tables": [r for r in rows]})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
