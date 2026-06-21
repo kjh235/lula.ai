@@ -1,7 +1,7 @@
 import base64
+import email as email_lib
 import logging
 import os
-import binascii
 import gmail
 import email_parser
 import data_management
@@ -23,10 +23,11 @@ def _fetch_gmail_messages(creds, search_query):
         logger.debug("processing message %s", msg['id'])
         txt = service.users().messages().get(userId='me', id=msg['id'], format='raw').execute()
         data = txt['raw'].replace("-", "+").replace("_", "/")
-        decoded_data = base64.b64decode(data)
+        raw_bytes = base64.b64decode(data)
+        msg_obj = email_lib.message_from_bytes(raw_bytes)
         email_epoch = int(txt['internalDate'][:-3])
         email_time = datetime.fromtimestamp(email_epoch, tz=None)
-        yield msg['id'], decoded_data, email_time, service
+        yield msg['id'], msg_obj, email_time, service
 
 
 def get_credentials_from_refresh_token(refresh_token):
