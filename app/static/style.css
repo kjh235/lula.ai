@@ -771,6 +771,8 @@ img { max-width: 100%; display: block; }
   border-radius: var(--radius-badge);
   font-size: 0.88rem;
   transition: background var(--transition);
+  cursor: pointer;
+  color: inherit;
 }
 .style-count-chip:hover {
   background: rgba(108, 99, 255, 0.12);
