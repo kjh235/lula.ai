@@ -30,11 +30,11 @@
             <span class="profile-stat-label">Pieces</span>
         </div>
         <div class="profile-stat">
-            <span class="profile-stat-value">{{ first_order_date[:10] if first_order_date else 'N/A' }}</span>
+            <span class="profile-stat-value">{{ first_order_date }}</span>
             <span class="profile-stat-label">First Order</span>
         </div>
         <div class="profile-stat">
-            <span class="profile-stat-value">{{ last_order_date[:10] if last_order_date else 'N/A' }}</span>
+            <span class="profile-stat-value">{{ last_order_date }}</span>
             <span class="profile-stat-label">Last Order</span>
         </div>
     </div>
@@ -62,7 +62,7 @@
                 <tbody>
                     {% for o in recent_orders %}
                     <tr>
-                        <td>{{ (o.PaidDate or o.InvoiceDate or '')[:10] }}</td>
+                        <td>{{ (o.PaidDate or o.InvoiceDate or '') }}</td>
                         <td>{{ o.OrderNumber }}</td>
                         <td>${{ "%.2f" | format(o.PaidTotal or 0) }}</td>
                         <td>{{ (o.PaidPieces or 0) | int }}</td>

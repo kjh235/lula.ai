@@ -13,6 +13,15 @@ def _parse_money(value):
     return value.lstrip("$").replace(',', '')
 
 
+def _parse_datetime(value, formats):
+    for fmt in formats:
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"time data {value!r} does not match any known format")
+
+
 def _ensure_column(cursor, table, column, col_type):
     cursor.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}")
 
@@ -221,6 +230,27 @@ def init_db(database_url=None):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fitfb_customer ON FitFeedback(CustomerID)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fitfb_sku ON FitFeedback(ProductSKU)")
 
+    cursor.execute("""
+        DELETE FROM PurchaseOrderItems
+        WHERE PurchaseItemID NOT IN (
+            SELECT MIN(PurchaseItemID)
+            FROM PurchaseOrderItems
+            GROUP BY UserID, OrderNumber, ProductSKU
+        )
+    """)
+
+    cursor.execute("""
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'purchaseorderitems'::regclass
+          AND conname = 'uq_purchaseorderitems_user_order_sku'
+    """)
+    if cursor.fetchone() is None:
+        cursor.execute("""
+            ALTER TABLE PurchaseOrderItems
+            ADD CONSTRAINT uq_purchaseorderitems_user_order_sku
+            UNIQUE (UserID, OrderNumber, ProductSKU)
+        """)
+
     conn.commit()
 
     from app.sizing import classify_family, normalize_size as _normalize_size, classify_product_family
@@ -354,10 +384,7 @@ def insert_purchase_order(dbconn, user_id, purchase_order_rec):
     cursor = dbconn.cursor()
     OrderNumber = purchase_order_rec[0]
     OrderEmail = purchase_order_rec[1]
-    try:
-        OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S %p")
-    except ValueError:
-        OrderDate = datetime.strptime(purchase_order_rec[2], "%m/%d/%Y %I:%M:%S")
+    OrderDate = _parse_datetime(purchase_order_rec[2], ["%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %I:%M:%S", "%m/%d/%Y %H:%M:%S"])
     Subtotal = _parse_money(purchase_order_rec[3])
     Shipping = _parse_money(purchase_order_rec[4])
     Taxes = _parse_money(purchase_order_rec[5])
@@ -398,11 +425,20 @@ def insert_purchase_order_item(dbconn, user_id, purchasedItemsRec, purchaseOrder
     LlrPieces = purchasedItemsRec[4]
     try:
         cursor.execute(
-            "INSERT INTO PurchaseOrderItems (PurchaseItemID, UserID, OrderNumber, ProductSKU, ProductName, Quantity, CostPerUnit, TotalCost, LlrPieces) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (UUID, user_id, OrderNumber, ProductSKU, ProductName, Quantity, CostPerUnit, TotalCost, LlrPieces)
+            "SELECT PurchaseItemID FROM PurchaseOrderItems "
+            "WHERE UserID = %s AND OrderNumber = %s AND ProductSKU = %s",
+            (user_id, OrderNumber, ProductSKU)
         )
-        dbconn.commit()
+        row = cursor.fetchone()
+
+        if row is None:
+            cursor.execute(
+                "INSERT INTO PurchaseOrderItems "
+                "(PurchaseItemID, UserID, OrderNumber, ProductSKU, ProductName, Quantity, CostPerUnit, TotalCost, LlrPieces) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (UUID, user_id, OrderNumber, ProductSKU, ProductName, Quantity, CostPerUnit, TotalCost, LlrPieces)
+            )
+            dbconn.commit()
         logger.debug("PO item saved")
     except Exception as e:
         logger.error("PO item failed to save: %s", e)
@@ -416,10 +452,7 @@ def insert_order(dbconn, user_id, retail_inv_rec, count_items):
     OrderPopup = retail_inv_rec[4]
     OrderEmail = retail_inv_rec[1]
     d_date = retail_inv_rec[2].replace(' PST', '')
-    try:
-        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
-    except ValueError:
-        InvDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
+    InvDate = _parse_datetime(d_date, ["%b %d %Y %I:%M %p", "%b %d %Y %I:%M", "%m/%d/%Y %H:%M:%S"])
     InvSubtotal = _parse_money(retail_inv_rec[5])
     InvShipping = _parse_money(retail_inv_rec[7])
     InvTaxes = _parse_money(retail_inv_rec[6])
@@ -454,11 +487,7 @@ def insert_order(dbconn, user_id, retail_inv_rec, count_items):
 def update_paid_order(conn, user_id, summary, numberOfItems, emailTime):
     cursor = conn.cursor()
     d_date = summary[2].replace(' PST', '')
-    PaidDate = emailTime
-    try:
-        PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M %p")
-    except ValueError:
-        PaidDate = datetime.strptime(d_date, "%b %d %Y %I:%M")
+    PaidDate = _parse_datetime(d_date, ["%b %d %Y %I:%M %p", "%b %d %Y %I:%M", "%m/%d/%Y %H:%M:%S"])
     PaidSubtotal = _parse_money(summary[5])
     PaidShipping = _parse_money(summary[7])
     PaidTaxes = _parse_money(summary[6])

@@ -1,7 +1,8 @@
 import base64
+import email as email_lib
+import email.policy
 import logging
 import os
-import binascii
 import gmail
 import email_parser
 import data_management
@@ -23,10 +24,11 @@ def _fetch_gmail_messages(creds, search_query):
         logger.debug("processing message %s", msg['id'])
         txt = service.users().messages().get(userId='me', id=msg['id'], format='raw').execute()
         data = txt['raw'].replace("-", "+").replace("_", "/")
-        decoded_data = base64.b64decode(data)
+        raw_bytes = base64.b64decode(data)
+        msg_obj = email_lib.message_from_bytes(raw_bytes, policy=email.policy.default)
         email_epoch = int(txt['internalDate'][:-3])
         email_time = datetime.fromtimestamp(email_epoch, tz=None)
-        yield msg['id'], decoded_data, email_time, service
+        yield msg['id'], msg_obj, email_time, service
 
 
 def get_credentials_from_refresh_token(refresh_token):
@@ -134,11 +136,11 @@ def transferPaid(creds, search_query, user_id):
             conn.close()
 
 
-search_query_retail_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Order Number" after:2026/04/01'
-search_query_transfer_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Transfer Order Number" after:2026/04/01'
+search_query_retail_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Order Number" after:2026/01/01'
+search_query_transfer_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Transfer Order Number" after:2026/01/01'
 search_query_purchase = 'from:noreply@lularoe.com subject: "LuLaRoe Wholesale Order Confirmation" after:2026/01/01'
-search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Purchase Receipt from LuLaRoe - Order Number" after:2026/05/01'
-search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2026/04/01'
+search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Purchase Receipt from LuLaRoe - Order Number" after:2026/01/01'
+search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2026/01/01'
 
 
 def sync_for_user(user_id, creds):

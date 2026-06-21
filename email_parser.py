@@ -1,3 +1,4 @@
+import email.utils
 import json
 import logging
 import os
@@ -8,32 +9,28 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 
-def remove_patterns(input_text, patterns_to_remove):
-    for pattern in patterns_to_remove:
-        input_text = re.sub(pattern, '', input_text)
-    return input_text.strip()
-
-patterns_to_remove = [r'\=20',r'\=09',r'\=E2',r'\=80',r'\=94',r'\=3D09',r'\=3D99',r'\=3DE2',r'\=3D80',r'\=3D20',r'\=3D',r'\=',r'\\n',r'\\r',r'\\t',r'\'\'',r'\'',r'\"',r'\<[^>]*>',r'\?utf-8\?Q\?']
-
 invoice_link = r'<a href="(.*?)"(.*?)\s+Pay Invoice'
 
 
-def message_parse(x, patterns_to_remove):
-    soup = BeautifulSoup(x, 'html.parser')
-    parsed_text = []
-    for string in soup.stripped_strings:
-        if len(string) > 0:
-            parsed_text.append(remove_patterns(repr(string), patterns_to_remove))
-    while ("" in parsed_text):
-        parsed_text.remove("")
-    return parsed_text
+def _get_html_body(msg_obj):
+    if msg_obj.is_multipart():
+        for part in msg_obj.walk():
+            if part.get_content_type() == 'text/html':
+                return part.get_content()
+    elif msg_obj.get_content_type() == 'text/html':
+        return msg_obj.get_content()
+    return ""
 
-def get_to_email(input_email_txt):
-    to_email_address_pattern = r'To\:\s+([a-zA-Z0-9._]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)X\-'
-    for rows in input_email_txt:
-        if (re.search(to_email_address_pattern, rows)):
-            to_email = re.search(to_email_address_pattern, rows).group(1)
-            return to_email
+
+def message_parse(msg_obj):
+    soup = BeautifulSoup(_get_html_body(msg_obj), 'html.parser')
+    return [s for s in soup.stripped_strings if s]
+
+
+def get_to_email(msg_obj):
+    return email.utils.parseaddr(msg_obj['To'])[1]
+
+
 def _load_translations():
     json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'product_name_translations.json')
     with open(json_path) as f:
@@ -49,23 +46,20 @@ def translate_productName_to_invoiceName(sku_list):
         new_sku_list.append(sku)
     return new_sku_list
 
-def get_email_type(k):
-    PURCHASE_ORDER_SUBJECT = r'Subject\:\s+LuLaRoe\s+Wholesale\s+Order\s+Confirmation'
-    purchase_invoice_subject = r'Subject: MyLuLaRoeOrderNumber'
-    customer_paid_invoice_subject = r'Subject: PurchaseReceiptfromLuLaRoe-OrderNumber'
-    transfer_invoice_subject = r'Subject: MyLuLaRoeTransferOrderNumber'
-    transfer_paid_invoice_subject = r'Subject: TransferReceiptfromLuLaRoe-OrderNumber'
-    for lines in k:
-        if re.search(PURCHASE_ORDER_SUBJECT, lines):
-            return "PO"
-        if (re.search(purchase_invoice_subject, lines)):
-            return "CUSTOMER_INV"
-        if (re.search(customer_paid_invoice_subject, lines)):
-            return "CUSTOMER_PAID"
-        if (re.search(transfer_invoice_subject, lines)):
-            return "TRANSFER_INV"
-        if (re.search(transfer_paid_invoice_subject, lines)):
-            return "TRANSFER_PAID"
+def get_email_type(subject):
+    if not subject:
+        return None
+    if re.search(r'LuLaRoe\s+Wholesale\s+Order\s+Confirmation', subject):
+        return "PO"
+    if re.search(r'My\s+LuLaRoe\s+Order\s+Number', subject):
+        return "CUSTOMER_INV"
+    if re.search(r'Purchase\s+Receipt\s+from\s+LuLaRoe', subject):
+        return "CUSTOMER_PAID"
+    if re.search(r'My\s+LuLaRoe\s+Transfer\s+Order\s+Number', subject):
+        return "TRANSFER_INV"
+    if re.search(r'Transfer\s+Receipt\s+from\s+LuLaRoe', subject):
+        return "TRANSFER_PAID"
+    return None
 
 def extract_discount(order_items):
         order_items_new = []
@@ -97,11 +91,11 @@ def extract_discount(order_items):
 
 
 
-def get_order_summary(x):
+def get_order_summary(msg_obj):
     try:
-        k = message_parse(x, patterns_to_remove)
-        recipient_email = get_to_email(k)
-        EMAIL_TYPE_TO_PROCESS = get_email_type(k)
+        k = message_parse(msg_obj)
+        recipient_email = get_to_email(msg_obj)
+        EMAIL_TYPE_TO_PROCESS = get_email_type(msg_obj['Subject'])
 
         if EMAIL_TYPE_TO_PROCESS == "PO":
             order_summary, order_items, sku_list = purchase_order_parse(k, recipient_email)
@@ -254,37 +248,30 @@ def paid_parse(k, recipient_email, is_transfer=False):
 retail_paid_parse = lambda k, email: paid_parse(k, email, is_transfer=False)
 transfer_paid_parse = lambda k, email: paid_parse(k, email, is_transfer=True)
 
+def _lookup_po_field_indices(k):
+    return {
+        'BIN': get_index("Bin", k),
+        'SUBTOTAL': get_index("Subtotal:", k),
+        'SHIPPING': get_index("Shipping:", k),
+        'TAXES': get_index("Taxes:", k),
+        'TOTAL': get_index("Total:", k),
+        'AMOUNT_PAID': get_index("Amount Paid:", k),
+        'PRICE': get_index("Price:", k),
+        'SHOPPING_CART': get_index("Shopping Cart", k),
+    }
+
+
 def purchase_order_parse(k, recipient_email):
-    BIN = "Bin"
-    BIN_INDEX = k.index(BIN)
-    SUBTOTAL = "Subtotal:"
-    SUBTOTAL_INDEX = k.index(SUBTOTAL)
-    SHIPPING = "Shipping:"
-    SHIPPING_INDEX = k.index(SHIPPING)
-    TAXES = "Taxes:"
-    TAXES_INDEX = k.index(TAXES)
-    TOTAL = "Total:"
-    TOTAL_INDEX = k.index(TOTAL)
-    AMOUNT_PAID = "Amount Paid:"
-    AMOUNT_PAID_INDEX = k.index(AMOUNT_PAID)
-    PRICE = "Price:"
-    PRICE_INDEX = k.index(PRICE)
-    SHOPPING_CART = "Shopping Cart"
-    SHOPPING_CART_INDEX = k.index(SHOPPING_CART)
-    NUM_OF_SKUS = int((SUBTOTAL_INDEX - BIN_INDEX) / 7) - 1
+    idx = _lookup_po_field_indices(k)
     ORDER_ITEM_COL = 7
+    num_of_skus = int((idx['SUBTOTAL'] - idx['BIN']) / ORDER_ITEM_COL) - 1
     order_items = []
-    j = 0
-    while j < (NUM_OF_SKUS):
-        i = 0
+    for j in range(num_of_skus):
         items = []
-        while i < (ORDER_ITEM_COL):
-            m = int(BIN_INDEX + (i + (j * ORDER_ITEM_COL)))
-            items.append(k[m].replace("T/C 2","T/C2"))
-            i += 1
+        for i in range(ORDER_ITEM_COL):
+            m = int(idx['BIN'] + (i + (j * ORDER_ITEM_COL)))
+            items.append(k[m].replace("T/C 2", "T/C2"))
         order_items.append(items)
-        j += 1
-    order_summary = []
     sku_list = []
     qty_sum = 0
     ptn = r'(.*)\s([A-z0-9]+[\/]?[A-z0-9]*)$'
@@ -292,10 +279,12 @@ def purchase_order_parse(k, recipient_email):
         if rows[0] != '99':
             qty_sum += float(rows[1])
             size = re.search(ptn, rows[3])
+            if size is None:
+                logger.warning("purchase_order_parse: could not parse size from %r, skipping row", rows[3])
+                continue
             sku_list.append([rows[2], rows[3], rows[5], size[1], size[2]])
-    summary_header = ["order number", "email", "date", "subtotal", "shipping", "taxes", "total", "item_qty"]
-    order_summary = [k[PRICE_INDEX + 1], recipient_email, k[SHOPPING_CART_INDEX + 1],
-                     k[SUBTOTAL_INDEX + 1], k[SHIPPING_INDEX + 1],
-                     k[TAXES_INDEX + 1], k[TOTAL_INDEX + 1], qty_sum]
+    order_summary = [k[idx['PRICE'] + 1], recipient_email, k[idx['SHOPPING_CART'] + 1],
+                     k[idx['SUBTOTAL'] + 1], k[idx['SHIPPING'] + 1],
+                     k[idx['TAXES'] + 1], k[idx['TOTAL'] + 1], qty_sum]
     sku_list = translate_productName_to_invoiceName(sku_list)
     return order_summary, order_items, sku_list

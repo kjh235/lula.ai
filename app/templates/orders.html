@@ -10,6 +10,12 @@
             <h3>All Orders</h3>
             <input type="text" class="search-box" id="orderSearch" placeholder="Search orders...">
         </div>
+        <div style="padding: 12px 20px; border-bottom: 1px solid var(--border-color, #e5e7eb); display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="type-filter-btn active" data-type="ALL" onclick="setTypeFilter(this)">All</button>
+            <button class="type-filter-btn" data-type="TRANSFER_IN" onclick="setTypeFilter(this)">Transfer IN</button>
+            <button class="type-filter-btn" data-type="TRANSFER_OUT" onclick="setTypeFilter(this)">Transfer OUT</button>
+            <button class="type-filter-btn" data-type="RETAIL" onclick="setTypeFilter(this)">Retail</button>
+        </div>
         <div class="card-body">
             {% if orders %}
             <table class="data-table" id="orderTable">
@@ -55,13 +61,49 @@
     </div>
 </div>
 
+<style>
+.type-filter-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border-color, #d1d5db);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-color, #374151);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+}
+.type-filter-btn:hover {
+    background: var(--hover-bg, #f3f4f6);
+}
+.type-filter-btn.active {
+    background: var(--accent-color, #6366f1);
+    color: #fff;
+    border-color: var(--accent-color, #6366f1);
+}
+</style>
 <script>
-document.getElementById('orderSearch').addEventListener('input', function() {
-    var filter = this.value.toLowerCase();
+var activeType = 'ALL';
+
+function applyFilters() {
+    var searchVal = document.getElementById('orderSearch').value.toLowerCase();
     var rows = document.querySelectorAll('#orderTable tbody tr');
     rows.forEach(function(row) {
-        row.style.display = row.textContent.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
+        var typeCell = row.querySelector('td:nth-child(3)');
+        var typeText = typeCell ? typeCell.textContent.trim().toUpperCase() : '';
+        var matchesType = activeType === 'ALL' || typeText === activeType;
+        var matchesSearch = row.textContent.toLowerCase().indexOf(searchVal) > -1;
+        row.style.display = (matchesType && matchesSearch) ? '' : 'none';
     });
-});
+}
+
+function setTypeFilter(btn) {
+    document.querySelectorAll('.type-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    activeType = btn.getAttribute('data-type');
+    applyFilters();
+}
+
+document.getElementById('orderSearch').addEventListener('input', applyFilters);
 </script>
 {% endblock %}
