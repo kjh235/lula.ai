@@ -69,12 +69,14 @@ def oauth_callback():
     try:
         tmp_id = binascii.b2a_hex(os.urandom(12)).decode()
         user_id = data_management.upsert_user(conn, tmp_id, email, name, refresh_token)
+        sub_status = _get_subscription_status(conn, user_id)
     finally:
         conn.close()
 
     session['user_id'] = user_id
     session['user_email'] = email
     session['user_name'] = name
+    session['subscription_status'] = sub_status or ''
 
     return redirect(url_for('dashboard'))
 
@@ -85,10 +87,37 @@ def logout():
     return redirect(url_for('landing'))
 
 
+def _get_subscription_status(conn, user_id):
+    row = conn.execute(
+        "SELECT Status FROM Subscriptions WHERE UserID = %s AND Status = 'active' LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    return row['Status'] if row else None
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('auth.login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def subscription_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('auth.login'))
+        if session.get('subscription_status') != 'active':
+            from app.db import get_conn
+            conn = get_conn()
+            try:
+                status = _get_subscription_status(conn, session['user_id'])
+            finally:
+                conn.close()
+            if status != 'active':
+                return redirect(url_for('payments.subscribe'))
+            session['subscription_status'] = 'active'
         return f(*args, **kwargs)
     return decorated
