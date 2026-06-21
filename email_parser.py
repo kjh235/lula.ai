@@ -1,3 +1,4 @@
+import email.utils
 import json
 import logging
 import os
@@ -8,32 +9,28 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 
-def remove_patterns(input_text, patterns_to_remove):
-    for pattern in patterns_to_remove:
-        input_text = re.sub(pattern, '', input_text)
-    return input_text.strip()
-
-patterns_to_remove = [r'\=20',r'\=09',r'\=E2',r'\=80',r'\=94',r'\=3D09',r'\=3D99',r'\=3DE2',r'\=3D80',r'\=3D20',r'\=3D',r'\=',r'\?utf-8\?Q\?']
-
 invoice_link = r'<a href="(.*?)"(.*?)\s+Pay Invoice'
 
 
-def message_parse(x, patterns_to_remove):
-    soup = BeautifulSoup(x, 'html.parser')
-    parsed_text = []
-    for string in soup.stripped_strings:
-        if len(string) > 0:
-            parsed_text.append(remove_patterns(string, patterns_to_remove))
-    while ("" in parsed_text):
-        parsed_text.remove("")
-    return parsed_text
+def _get_html_body(msg_obj):
+    if msg_obj.is_multipart():
+        for part in msg_obj.walk():
+            if part.get_content_type() == 'text/html':
+                return part.get_content()
+    elif msg_obj.get_content_type() == 'text/html':
+        return msg_obj.get_content()
+    return ""
 
-def get_to_email(input_email_txt):
-    to_email_address_pattern = r'To\:\s+([a-zA-Z0-9._]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)X\-'
-    for rows in input_email_txt:
-        if (re.search(to_email_address_pattern, rows)):
-            to_email = re.search(to_email_address_pattern, rows).group(1)
-            return to_email
+
+def message_parse(msg_obj):
+    soup = BeautifulSoup(_get_html_body(msg_obj), 'html.parser')
+    return [s for s in soup.stripped_strings if s]
+
+
+def get_to_email(msg_obj):
+    return email.utils.parseaddr(msg_obj['To'])[1]
+
+
 def _load_translations():
     json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'product_name_translations.json')
     with open(json_path) as f:
@@ -49,23 +46,20 @@ def translate_productName_to_invoiceName(sku_list):
         new_sku_list.append(sku)
     return new_sku_list
 
-def get_email_type(k):
-    PURCHASE_ORDER_SUBJECT = r'Subject\:\s+LuLaRoe\s+Wholesale\s+Order\s+Confirmation'
-    purchase_invoice_subject = r'Subject: MyLuLaRoeOrderNumber'
-    customer_paid_invoice_subject = r'Subject: PurchaseReceiptfromLuLaRoe-OrderNumber'
-    transfer_invoice_subject = r'Subject: MyLuLaRoeTransferOrderNumber'
-    transfer_paid_invoice_subject = r'Subject: TransferReceiptfromLuLaRoe-OrderNumber'
-    for lines in k:
-        if re.search(PURCHASE_ORDER_SUBJECT, lines):
-            return "PO"
-        if (re.search(purchase_invoice_subject, lines)):
-            return "CUSTOMER_INV"
-        if (re.search(customer_paid_invoice_subject, lines)):
-            return "CUSTOMER_PAID"
-        if (re.search(transfer_invoice_subject, lines)):
-            return "TRANSFER_INV"
-        if (re.search(transfer_paid_invoice_subject, lines)):
-            return "TRANSFER_PAID"
+def get_email_type(subject):
+    if not subject:
+        return None
+    if re.search(r'LuLaRoe\s+Wholesale\s+Order\s+Confirmation', subject):
+        return "PO"
+    if re.search(r'My\s+LuLaRoe\s+Order\s+Number', subject):
+        return "CUSTOMER_INV"
+    if re.search(r'Purchase\s+Receipt\s+from\s+LuLaRoe', subject):
+        return "CUSTOMER_PAID"
+    if re.search(r'My\s+LuLaRoe\s+Transfer\s+Order\s+Number', subject):
+        return "TRANSFER_INV"
+    if re.search(r'Transfer\s+Receipt\s+from\s+LuLaRoe', subject):
+        return "TRANSFER_PAID"
+    return None
 
 def extract_discount(order_items):
         order_items_new = []
@@ -97,11 +91,11 @@ def extract_discount(order_items):
 
 
 
-def get_order_summary(x):
+def get_order_summary(msg_obj):
     try:
-        k = message_parse(x, patterns_to_remove)
-        recipient_email = get_to_email(k)
-        EMAIL_TYPE_TO_PROCESS = get_email_type(k)
+        k = message_parse(msg_obj)
+        recipient_email = get_to_email(msg_obj)
+        EMAIL_TYPE_TO_PROCESS = get_email_type(msg_obj['Subject'])
 
         if EMAIL_TYPE_TO_PROCESS == "PO":
             order_summary, order_items, sku_list = purchase_order_parse(k, recipient_email)
