@@ -136,11 +136,11 @@ def transferPaid(creds, search_query, user_id):
             conn.close()
 
 
-search_query_retail_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Order Number" after:2026/04/01'
-search_query_transfer_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Transfer Order Number" after:2026/04/01'
+search_query_retail_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Order Number" after:2026/01/01'
+search_query_transfer_invoices = 'in:anywhere from:noreply@lularoebless.com subject:"My LuLaRoe Transfer Order Number" after:2026/01/01'
 search_query_purchase = 'from:noreply@lularoe.com subject: "LuLaRoe Wholesale Order Confirmation" after:2026/01/01'
-search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Purchase Receipt from LuLaRoe - Order Number" after:2026/05/01'
-search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2026/04/01'
+search_query_retail_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Purchase Receipt from LuLaRoe - Order Number" after:2026/01/01'
+search_query_transfer_paid = 'in:anywhere from:noreply@lularoebless.com subject:"Transfer Receipt from LuLaRoe - Order Number" after:2026/01/01'
 
 
 def sync_for_user(user_id, creds):
