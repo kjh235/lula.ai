@@ -1,5 +1,6 @@
 import base64
 import email as email_lib
+import email.policy
 import logging
 import os
 import gmail
@@ -24,7 +25,7 @@ def _fetch_gmail_messages(creds, search_query):
         txt = service.users().messages().get(userId='me', id=msg['id'], format='raw').execute()
         data = txt['raw'].replace("-", "+").replace("_", "/")
         raw_bytes = base64.b64decode(data)
-        msg_obj = email_lib.message_from_bytes(raw_bytes)
+        msg_obj = email_lib.message_from_bytes(raw_bytes, policy=email.policy.default)
         email_epoch = int(txt['internalDate'][:-3])
         email_time = datetime.fromtimestamp(email_epoch, tz=None)
         yield msg['id'], msg_obj, email_time, service
