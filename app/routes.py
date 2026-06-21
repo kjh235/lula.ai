@@ -199,6 +199,68 @@ def inventory():
     )
 
 
+@app.route("/inventory/styles/<path:style_name>")
+@login_required
+def style_detail(style_name):
+    user_id = session['user_id']
+    conn = get_conn()
+
+    inventory = conn.execute(
+        "SELECT p.ProductSize, p.SizeNormalized, "
+        "COALESCE(SUM(l.Delta), 0) AS Quantity "
+        "FROM Products p "
+        "LEFT JOIN InventoryLedger l ON l.ProductName = p.ProductName AND l.UserID = p.UserID "
+        "WHERE p.UserID = %s AND p.ProductStyle = %s "
+        "GROUP BY p.ProductSize, p.SizeNormalized "
+        "ORDER BY p.SizeNormalized, p.ProductSize",
+        (user_id, style_name)
+    ).fetchall()
+
+    if not inventory:
+        conn.close()
+        return "Style not found", 404
+
+    total_units = sum(r['Quantity'] for r in inventory)
+
+    recent_orders = conn.execute(
+        "SELECT o.OrderNumber, COALESCE(o.PaidDate, o.InvoiceDate) AS OrderDate, "
+        "c.CustomerName, c.CustomerEmail, oi.ProductName AS ItemName, "
+        "COALESCE("
+        "  (SELECT p.SizeNormalized FROM Products p "
+        "   WHERE p.UserID = %(uid)s AND p.ProductStyle = %(style)s "
+        "   AND (p.InvProductName = oi.ProductName "
+        "        OR oi.ProductName LIKE ('%%' || p.ProductStyle || ' ' || p.ProductSize) "
+        "        OR oi.ProductName = (p.ProductStyle || ' ' || p.ProductSize)) "
+        "   LIMIT 1), ''"
+        ") AS SizeNormalized, "
+        "oi.TotalPrice "
+        "FROM OrderItems oi "
+        "JOIN Orders o ON o.OrderNumber = oi.OrderNumber AND o.UserID = oi.UserID "
+        "  AND o.OrderType = 'RETAIL' "
+        "LEFT JOIN Customers c ON c.CustomerEmail = o.OrderEmail AND c.UserID = o.UserID "
+        "WHERE oi.UserID = %(uid)s "
+        "AND EXISTS ("
+        "  SELECT 1 FROM Products p "
+        "  WHERE p.UserID = %(uid)s AND p.ProductStyle = %(style)s "
+        "  AND (p.InvProductName = oi.ProductName "
+        "       OR oi.ProductName LIKE ('%%' || p.ProductStyle || ' ' || p.ProductSize) "
+        "       OR oi.ProductName = (p.ProductStyle || ' ' || p.ProductSize))"
+        ") "
+        "ORDER BY COALESCE(o.PaidDate, o.InvoiceDate) DESC "
+        "LIMIT 50",
+        {'uid': user_id, 'style': style_name}
+    ).fetchall()
+
+    conn.close()
+    return render_template(
+        'style_detail.html',
+        style_name=style_name,
+        inventory=inventory,
+        total_units=total_units,
+        recent_orders=recent_orders,
+    )
+
+
 @app.route("/orders")
 @login_required
 def orders():

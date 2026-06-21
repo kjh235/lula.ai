@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% set active_page = 'inventory' %}
+{% block title %}{{ style_name }} – Style Detail{% endblock %}
+{% block page_title %}{{ style_name }}{% endblock %}
+
+{% block content %}
+<div style="padding: 0 32px 8px;">
+    <a href="{{ url_for('inventory') }}" style="color: var(--accent); text-decoration: none; font-size: 0.9rem;">
+        &larr; Back to Inventory
+    </a>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ inventory | length }}</div>
+        <div class="stat-label">Sizes</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ total_units }}</div>
+        <div class="stat-label">Units on Hand</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ recent_orders | length }}</div>
+        <div class="stat-label">Recent Sales</div>
+    </div>
+</div>
+
+<div style="padding: 0 32px 20px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>Current Inventory by Size</h3>
+        </div>
+        <div class="card-body">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Size</th>
+                        <th>Units on Hand</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in inventory %}
+                    <tr>
+                        <td><span class="badge">{{ row.SizeNormalized or row.ProductSize }}</span></td>
+                        <td>{{ row.Quantity }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div style="padding: 0 32px 32px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>Recent Orders</h3>
+        </div>
+        <div class="card-body">
+            {% if recent_orders %}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Order #</th>
+                        <th>Customer</th>
+                        <th>Size</th>
+                        <th>Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in recent_orders %}
+                    <tr>
+                        <td>{{ o.OrderDate or '' }}</td>
+                        <td>{{ o.OrderNumber }}</td>
+                        <td>
+                            {% if o.CustomerName %}
+                                {{ o.CustomerName }}
+                            {% else %}
+                                {{ o.CustomerEmail or '—' }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if o.SizeNormalized %}
+                                <span class="badge">{{ o.SizeNormalized }}</span>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>${{ "%.2f" | format(o.TotalPrice | float) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <p>No sales found for this style.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
