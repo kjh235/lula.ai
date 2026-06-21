@@ -5,7 +5,7 @@ from datetime import datetime
 
 from flask import render_template, jsonify, request, redirect, url_for, flash, session
 from app import app
-from app.auth import login_required
+from app.auth import login_required, subscription_required
 from app.db import get_conn
 from credential_manager import save_credentials, get_credentials, delete_credentials, PLATFORM_BLESS
 from app.recommendations import (
@@ -22,7 +22,7 @@ def landing():
 
 
 @app.route("/dashboard")
-@login_required
+@subscription_required
 def dashboard():
     user_id = session['user_id']
     conn = get_conn()
@@ -89,7 +89,7 @@ def dashboard():
 
 
 @app.route("/customers")
-@login_required
+@subscription_required
 def customers():
     user_id = session['user_id']
     conn = get_conn()
@@ -111,7 +111,7 @@ def customers():
 
 
 @app.route("/customers/<customer_id>")
-@login_required
+@subscription_required
 def customer_detail(customer_id):
     user_id = session['user_id']
     customer = get_customer_info(user_id, customer_id)
@@ -155,7 +155,7 @@ def customer_detail(customer_id):
 
 
 @app.route("/inventory")
-@login_required
+@subscription_required
 def inventory():
     user_id = session['user_id']
     conn = get_conn()
@@ -200,7 +200,7 @@ def inventory():
 
 
 @app.route("/inventory/styles/<path:style_name>")
-@login_required
+@subscription_required
 def style_detail(style_name):
     user_id = session['user_id']
     conn = get_conn()
@@ -262,7 +262,7 @@ def style_detail(style_name):
 
 
 @app.route("/orders")
-@login_required
+@subscription_required
 def orders():
     user_id = session['user_id']
     conn = get_conn()
@@ -281,7 +281,7 @@ def orders():
 
 
 @app.route("/purchase-order")
-@login_required
+@subscription_required
 def purchase_order():
     user_id = session['user_id']
     conn = get_conn()
@@ -328,7 +328,7 @@ _MATCHED_SALES_SQL = """
 
 
 @app.route("/purchase-orders")
-@login_required
+@subscription_required
 def purchase_orders():
     user_id = session['user_id']
     conn = get_conn()
@@ -385,7 +385,7 @@ def purchase_orders():
 
 
 @app.route("/purchase-orders/<order_number>")
-@login_required
+@subscription_required
 def purchase_order_detail(order_number):
     user_id = session['user_id']
     conn = get_conn()
@@ -461,7 +461,7 @@ def purchase_order_detail(order_number):
 
 
 @app.route("/api/customers/<customer_id>/recommendations")
-@login_required
+@subscription_required
 def api_recommendations(customer_id):
     user_id = session['user_id']
     n = request.args.get('n', 5, type=int)
@@ -470,7 +470,7 @@ def api_recommendations(customer_id):
 
 
 @app.route("/api/feedback", methods=["POST"])
-@login_required
+@subscription_required
 def api_feedback():
     user_id = session['user_id']
     data = request.get_json()
@@ -504,7 +504,7 @@ def api_feedback():
 
 
 @app.route("/sync", methods=["POST"])
-@login_required
+@subscription_required
 def sync_emails():
     user_id = session['user_id']
     conn = get_conn()
@@ -526,7 +526,7 @@ def sync_emails():
 
 
 @app.route("/admin/sync-status")
-@login_required
+@subscription_required
 def sync_status():
     user_id = session['user_id']
     conn = get_conn()
@@ -543,13 +543,13 @@ def sync_status():
 
 
 @app.route("/admin/sync-now", methods=["POST"])
-@login_required
+@subscription_required
 def sync_now():
     return jsonify({"status": "ok", "message": "Use /sync to trigger per-user email sync"})
 
 
 @app.route("/settings/credentials", methods=["GET"])
-@login_required
+@subscription_required
 def credentials_settings():
     user_id = session['user_id']
     existing = get_credentials(user_id, PLATFORM_BLESS)
@@ -562,7 +562,7 @@ def credentials_settings():
 
 
 @app.route("/settings/credentials", methods=["POST"])
-@login_required
+@subscription_required
 def credentials_settings_save():
     user_id = session['user_id']
     action = request.form.get("action", "save")
@@ -593,7 +593,7 @@ def credentials_settings_save():
 
 
 @app.route("/admin/scrape-now", methods=["POST"])
-@login_required
+@subscription_required
 def scrape_now():
     user_id = session['user_id']
     from lularoe_scraper import BlessScraper

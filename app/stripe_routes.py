@@ -8,6 +8,7 @@ import stripe
 from flask import Blueprint, jsonify, render_template, request, current_app, session
 
 from app.db import get_conn
+from app.auth import login_required
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ def _stripe_keys():
 
 
 @payments.route("/subscribe")
+@login_required
 def subscribe():
     keys = _stripe_keys()
     return render_template("subscribe.html", publishable_key=keys.get("publishable_key", ""))
@@ -51,6 +53,17 @@ def create_checkout_session():
 
 @payments.route("/success")
 def success():
+    if 'user_id' in session:
+        conn = get_conn()
+        try:
+            row = conn.execute(
+                "SELECT Status FROM Subscriptions WHERE UserID = %s AND Status = 'active' LIMIT 1",
+                (session['user_id'],),
+            ).fetchone()
+            if row:
+                session['subscription_status'] = row['Status']
+        finally:
+            conn.close()
     return render_template("success.html")
 
 
