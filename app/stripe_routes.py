@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 import binascii
 from datetime import datetime
@@ -159,20 +158,15 @@ def _handle_subscription_deleted(subscription):
 
 
 def load_stripe_config(app):
-    config_path = os.path.join(app.root_path, '..', 'stripe.json')
-    if not os.path.exists(config_path):
-        logger.warning("stripe.json not found — Stripe features disabled")
+    keys = {
+        "secret_key": os.environ.get("STRIPE_SECRET_KEY", ""),
+        "publishable_key": os.environ.get("STRIPE_PUBLISHABLE_KEY", ""),
+        "price_id": os.environ.get("STRIPE_PRICE_ID", ""),
+        "endpoint_secret": os.environ.get("STRIPE_ENDPOINT_SECRET", ""),
+    }
+    if not keys["secret_key"]:
+        logger.warning("STRIPE_SECRET_KEY not set — Stripe features disabled")
         app.config['STRIPE_KEYS'] = {}
         return
-
-    with open(config_path) as f:
-        data = json.load(f)
-
-    keys = {
-        "secret_key": data.get("STRIPE_SECRET_KEY", ""),
-        "publishable_key": data.get("STRIPE_PUBLISHABLE_KEY", ""),
-        "price_id": data.get("STRIPE_PRICE_ID", ""),
-        "endpoint_secret": data.get("STRIPE_ENDPOINT_SECRET", ""),
-    }
     app.config['STRIPE_KEYS'] = keys
     stripe.api_key = keys["secret_key"]
