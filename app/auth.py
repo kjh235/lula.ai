@@ -48,8 +48,10 @@ def oauth_callback():
 
     code = request.args.get('code')
     if not code:
-        logger.error('No code in callback. args: %s', request.args)
-        return 'Missing code in OAuth callback — please try signing in again.', 400
+        logger.error('No code in callback. url=%s args=%s', request.url, request.args)
+        return (
+            f'Missing code. URL: {request.url} | Args: {dict(request.args)}'
+        ), 400
 
     token_resp = req.post(_TOKEN_URI, data={
         'code': code,
