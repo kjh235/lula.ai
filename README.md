@@ -1,1 +1,1 @@
-# lula.ai
+# ai-lula.com
