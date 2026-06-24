@@ -7,12 +7,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
-    <title>Lula.ai - {% block title %}{% endblock %}</title>
+    <title>AI-Lula - {% block title %}{% endblock %}</title>
 </head>
 <body class="app-layout">
     {% set active_page = active_page|default('') %}
     <aside class="sidebar">
-        <div class="logo">Lula.ai</div>
+        <div class="logo">AI-Lula</div>
         <nav>
             <a class="sidebar-link{% if active_page == 'dashboard' %} active{% endif %}" href="/dashboard">Dashboard</a>
             <a class="sidebar-link{% if active_page == 'customers' %} active{% endif %}" href="/customers">Customers</a>
