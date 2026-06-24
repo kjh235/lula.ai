@@ -41,7 +41,16 @@ def oauth_callback():
     import data_management
     from app.db import get_conn
 
+    error = request.args.get('error')
+    if error:
+        logger.error('OAuth error from Google: %s', request.args)
+        return f'Google sign-in error: {error}', 400
+
     code = request.args.get('code')
+    if not code:
+        logger.error('No code in callback. args: %s', request.args)
+        return 'Missing code in OAuth callback — please try signing in again.', 400
+
     token_resp = req.post(_TOKEN_URI, data={
         'code': code,
         'client_id': os.environ['GOOGLE_CLIENT_ID'],
