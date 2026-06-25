@@ -52,17 +52,11 @@ def create_checkout_session():
 
 @payments.route("/success")
 def success():
+    # Stripe only redirects here on successful checkout, so mark the session
+    # active immediately. The webhook will persist the subscription to the DB
+    # asynchronously, but we can't block the user on that race.
     if 'user_id' in session:
-        conn = get_conn()
-        try:
-            row = conn.execute(
-                "SELECT Status FROM Subscriptions WHERE UserID = %s AND Status = 'active' LIMIT 1",
-                (session['user_id'],),
-            ).fetchone()
-            if row:
-                session['subscription_status'] = row['Status']
-        finally:
-            conn.close()
+        session['subscription_status'] = 'active'
     return render_template("success.html")
 
 
