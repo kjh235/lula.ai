@@ -49,7 +49,7 @@
     });
     </script>
     {% else %}
-    <p>Stripe is not configured. Add a <code>stripe.json</code> file to enable subscriptions.</p>
+    <p>Stripe is not configured. Set the <code>STRIPE_SECRET_KEY</code>, <code>STRIPE_PUBLISHABLE_KEY</code>, <code>STRIPE_PRICE_ID</code>, and <code>STRIPE_ENDPOINT_SECRET</code> environment variables to enable subscriptions.</p>
     {% endif %}
 </body>
 </html>
