@@ -516,13 +516,15 @@ def sync_emails():
     if not row or not row['GoogleRefreshToken']:
         return jsonify({"error": "No Gmail credentials. Please sign in again."}), 400
 
+    import threading
     from check_email import sync_for_user, get_credentials_from_refresh_token
     try:
         creds = get_credentials_from_refresh_token(row['GoogleRefreshToken'])
-        sync_for_user(user_id, creds)
-        return jsonify({"status": "ok"})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+    threading.Thread(target=sync_for_user, args=(user_id, creds), daemon=True).start()
+    return jsonify({"status": "ok", "background": True})
 
 
 @app.route("/admin/sync-status")
