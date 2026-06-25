@@ -41,12 +41,12 @@
     <script>
     function syncEmails(btn) {
         btn.disabled = true;
-        btn.textContent = 'Syncing...';
+        btn.textContent = 'Starting...';
         fetch('/sync', {method: 'POST'})
             .then(r => r.json())
             .then(d => {
-                btn.textContent = d.error ? 'Sync Failed' : 'Sync Done';
-                setTimeout(() => { btn.disabled = false; btn.textContent = 'Sync Emails'; }, 3000);
+                btn.textContent = d.error ? 'Sync Failed' : 'Sync Queued';
+                setTimeout(() => { btn.disabled = false; btn.textContent = 'Sync Emails'; }, 4000);
             })
             .catch(() => {
                 btn.textContent = 'Sync Failed';
